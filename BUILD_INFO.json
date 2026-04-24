@@ -1,0 +1,18 @@
+{
+  "project": "Sovereign Shards",
+  "build_timestamp": "2026-04-24T15:00:33.6018063-05:00",
+  "source_workspace": "C:\\Users\\music\\Documents\\New project",
+  "local_resources_used": [
+    "C:\\Jarvis_Sovereign\\Models\\GGUF\\brain.gguf",
+    "E:\\shard\\tools\\exec.py",
+    "E:\\shard\\tools\\read.py",
+    "E:\\shard\\tools\\write.py",
+    "E:\\shard\\tools\\scaffold.py",
+    "prompts\\system.txt",
+    "prompts\\developer.txt"
+  ],
+  "default_runtime": {
+    "provider": "ollama",
+    "model": "brain"
+  }
+}

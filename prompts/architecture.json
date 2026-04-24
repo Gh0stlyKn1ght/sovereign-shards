@@ -1,0 +1,6 @@
+{
+  "manifest_id": "BLUE-J-CORE",
+  "last_updated": "2026-04-12",
+  "permissions": "read-write",
+  "files": ["run.py", "app/chat.py", "app/client.py", "prompts/system.txt"]
+}
