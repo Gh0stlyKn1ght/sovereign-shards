@@ -6,7 +6,8 @@ from json import dumps, loads
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from app.client import OllamaConfig, create_client
+from app.client import RuntimeConfig, create_client
+from app.local_server import LocalLlamaServer
 from app.session import SessionLogger
 from app.system_tools import get_system_snapshot
 
@@ -25,8 +26,8 @@ def build_history(system_context: str = "") -> list[dict[str, str]]:
     return history
 
 
-def ollama_chat(client: OllamaConfig, messages: list[dict[str, str]]):
-    """Send a chat request to the local Ollama server."""
+def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
+    """Send a chat request to an Ollama-compatible endpoint."""
     payload = {
         "model": client.model,
         "messages": messages,
@@ -40,7 +41,30 @@ def ollama_chat(client: OllamaConfig, messages: list[dict[str, str]]):
         },
     }
     request = Request(
-        url=f"{client.host}/api/chat",
+        url=f"{client.base_url}/api/chat",
+        data=dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        return urlopen(request, timeout=300)
+    except Exception as error:
+        raise RuntimeError(f"Connection failed: {error}") from error
+
+
+def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
+    """Send a chat request to the local llama.cpp server."""
+    payload = {
+        "model": client.model,
+        "messages": messages,
+        "stream": True,
+        "max_tokens": client.num_predict,
+        "temperature": client.temperature,
+        "top_p": client.top_p,
+        "stop": list(client.stop_tokens),
+    }
+    request = Request(
+        url=f"{client.base_url}/v1/chat/completions",
         data=dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -67,17 +91,32 @@ def _format_hardware_context() -> str:
     )
 
 
-def _run_turn(
-    client: OllamaConfig,
-    messages: list[dict[str, str]],
-    logger: SessionLogger,
-    user_message: str,
-) -> str:
-    messages.append({"role": "user", "content": user_message})
-    logger.append("user", user_message)
+def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
+    """Stream a reply from the configured backend."""
     reply = ""
+    if client.backend == "llama_cpp":
+        with _llama_cpp_chat(client, messages) as response:
+            for raw_line in response:
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8", errors="ignore").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                chunk = loads(data)
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                content = delta.get("content") or ""
+                if content:
+                    print(content, end="", flush=True)
+                    reply += content
+        return reply
 
-    with ollama_chat(client, messages) as response:
+    with _ollama_chat(client, messages) as response:
         for line in response:
             if not line:
                 continue
@@ -88,7 +127,19 @@ def _run_turn(
                 reply += content
             if chunk.get("done"):
                 break
+    return reply
 
+
+def _run_turn(
+    client: RuntimeConfig,
+    messages: list[dict[str, str]],
+    logger: SessionLogger,
+    user_message: str,
+) -> str:
+    """Run a single conversation turn."""
+    messages.append({"role": "user", "content": user_message})
+    logger.append("user", user_message)
+    reply = _stream_reply(client, messages)
     print()
     messages.append({"role": "assistant", "content": reply})
     logger.append("assistant", reply)
@@ -98,33 +149,40 @@ def _run_turn(
 def run_chat(initial_message: str | None = None) -> None:
     """Run the interactive chat loop with real-time streaming."""
     client = create_client()
-    logger = SessionLogger(model=client.model)
+    logger = SessionLogger(model=f"{client.backend}:{client.model}")
     messages = build_history(_format_hardware_context())
+    local_server = LocalLlamaServer(client)
 
-    print(f"--- SOVEREIGN SHARD ONLINE [{logger.session_id}] ---")
-    print(f"Model: {client.model}")
-    print("Commands: quit, exit, /snapshot")
+    try:
+        local_server.ensure_started()
 
-    if initial_message:
-        print("\nJ.: ", end="", flush=True)
-        _run_turn(client, messages, logger, initial_message)
-        return
+        print(f"--- SOVEREIGN SHARD ONLINE [{logger.session_id}] ---")
+        print(f"Backend: {client.backend}")
+        print(f"Model: {client.model}")
+        print("Commands: quit, exit, /snapshot")
 
-    while True:
-        user_message = input("\nYou: ").strip()
-        if user_message.lower() in {"quit", "exit"}:
-            print(f"Session saved to {logger.transcript_path}")
-            break
-        if not user_message:
-            continue
-        if user_message == "/snapshot":
-            snapshot = dumps(get_system_snapshot(), indent=2)
-            print(snapshot)
-            logger.append("system", snapshot)
-            continue
-        try:
+        if initial_message:
             print("\nJ.: ", end="", flush=True)
-            _run_turn(client, messages, logger, user_message)
-        except RuntimeError as error:
-            print(f"\nJ. Error: {error}")
-            logger.append("error", str(error))
+            _run_turn(client, messages, logger, initial_message)
+            return
+
+        while True:
+            user_message = input("\nYou: ").strip()
+            if user_message.lower() in {"quit", "exit"}:
+                print(f"Session saved to {logger.transcript_path}")
+                break
+            if not user_message:
+                continue
+            if user_message == "/snapshot":
+                snapshot = dumps(get_system_snapshot(), indent=2)
+                print(snapshot)
+                logger.append("system", snapshot)
+                continue
+            try:
+                print("\nJ.: ", end="", flush=True)
+                _run_turn(client, messages, logger, user_message)
+            except RuntimeError as error:
+                print(f"\nJ. Error: {error}")
+                logger.append("error", str(error))
+    finally:
+        local_server.stop()

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from app.chat import run_chat
+
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
 def main() -> None:
@@ -14,7 +18,19 @@ def main() -> None:
         "--message",
         help="Send a single prompt and exit.",
     )
+    parser.add_argument(
+        "--paths",
+        action="store_true",
+        help="Print the shard-local runtime paths and exit.",
+    )
     args = parser.parse_args()
+    if args.paths:
+        print(f"Shard: {BASE_DIR}")
+        print(f"Python: {BASE_DIR / 'python.exe'}")
+        print(f"Server: {BASE_DIR / 'model-server' / 'server.exe'}")
+        print(f"CLI: {BASE_DIR / 'model-server' / 'llama.exe'}")
+        print(f"Model: {BASE_DIR / 'models' / 'brain.gguf'}")
+        return
     run_chat(initial_message=args.message)
 
 
