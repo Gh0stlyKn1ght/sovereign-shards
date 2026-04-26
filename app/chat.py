@@ -10,27 +10,28 @@ from app.client import RuntimeConfig, create_client
 from app.local_server import LocalLlamaServer
 from app.session import SessionLogger
 from app.system_tools import get_system_snapshot
+from core.fivemasters import evaluate_code
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = BASE_DIR / "prompts"
 
-# Load J's identity instead of the generic system prompt
 SYSTEM_PROMPT = (PROMPTS_DIR / "J-system.txt").read_text(encoding="utf-8")
 
-# No developer prompt needed — J-system.txt already includes identity + rules
-COMBINED_SYSTEM_PROMPT = SYSTEM_PROMPT
 
-
-def build_history(system_context: str = "") -> list[dict[str, str]]:
-    """Build the initial chat history."""
-    history = [{"role": "system", "content": COMBINED_SYSTEM_PROMPT}]
-    if system_context:
-        history.append({"role": "system", "content": system_context})
-    return history
+def build_history(system_context: str = ""):
+    return [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT + (
+                f"\n\n[Context]\n{system_context}"
+                if system_context else ""
+            )
+        }
+    ]
 
 
 def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
-    """Send a chat request to an Ollama-compatible endpoint."""
     payload = {
         "model": client.model,
         "messages": messages,
@@ -43,12 +44,14 @@ def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
             "temperature": client.temperature,
         },
     }
+
     request = Request(
         url=f"{client.base_url}/api/chat",
         data=dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+
     try:
         return urlopen(request, timeout=300)
     except Exception as error:
@@ -56,7 +59,6 @@ def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
 
 
 def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
-    """Send a chat request to the local llama.cpp server."""
     payload = {
         "model": client.model,
         "messages": messages,
@@ -66,12 +68,14 @@ def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
         "top_p": client.top_p,
         "stop": list(client.stop_tokens),
     }
+
     request = Request(
         url=f"{client.base_url}/v1/chat/completions",
         data=dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+
     try:
         return urlopen(request, timeout=300)
     except Exception as error:
@@ -79,8 +83,8 @@ def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
 
 
 def _format_hardware_context() -> str:
-    """Create the system context injected into the chat."""
     snapshot = get_system_snapshot()
+
     if snapshot.get("status") != "ONLINE":
         return "[Sovereign Identity Unavailable]"
 
@@ -95,42 +99,75 @@ def _format_hardware_context() -> str:
 
 
 def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
-    """Stream a reply from the configured backend."""
-    reply = ""
+    """Stream reply with safe interception layer."""
+    reply_chunks = []
+
+    def emit(token: str) -> None:
+        print(token, end="", flush=True)
+
+    def maybe_evaluate(content: str) -> str:
+        """Five Masters gate (SAFE, scoped, non-crashing)."""
+        if "def " in content or "class " in content:
+            try:
+                report = evaluate_code(content)
+                if report.score() < 5:
+                    return f"\n[FIVE MASTERS WARNING]\n{report}\n\n{content}"
+            except Exception:
+                pass
+        return content
+
     if client.backend == "llama_cpp":
         with _llama_cpp_chat(client, messages) as response:
             for raw_line in response:
                 if not raw_line:
                     continue
+
                 line = raw_line.decode("utf-8", errors="ignore").strip()
+
                 if not line.startswith("data:"):
                     continue
+
                 data = line[5:].strip()
+
                 if data == "[DONE]":
                     break
+
                 chunk = loads(data)
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
+
                 delta = choices[0].get("delta") or {}
                 content = delta.get("content") or ""
-                if content:
-                    print(content, end="", flush=True)
-                    reply += content
-        return reply
 
+                if not content:
+                    continue
+
+                content = maybe_evaluate(content)
+
+                emit(content)
+                reply_chunks.append(content)
+
+        return "".join(reply_chunks)
+
+    # --- fallback (ollama) ---
     with _ollama_chat(client, messages) as response:
+        full_reply = ""
         for line in response:
             if not line:
                 continue
+
             chunk = loads(line.decode("utf-8"))
+
             if "message" in chunk:
                 content = chunk["message"]["content"]
-                print(content, end="", flush=True)
-                reply += content
+                emit(content)
+                full_reply += content
+
             if chunk.get("done"):
                 break
-    return reply
+
+        return full_reply
 
 
 def _run_turn(
@@ -139,18 +176,28 @@ def _run_turn(
     logger: SessionLogger,
     user_message: str,
 ) -> str:
-    """Run a single conversation turn."""
+
     messages.append({"role": "user", "content": user_message})
     logger.append("user", user_message)
+
     reply = _stream_reply(client, messages)
+
     print()
-    messages.append({"role": "J", "content": reply})
-    logger.append("J", reply)
+
+    messages.append({"role": "assistant", "content": reply})
+    logger.append("assistant", reply)
+
     return reply
 
 
-def run_chat(initial_message: str | None = None) -> None:
-    """Run the interactive chat loop with real-time streaming."""
+def run_chat(
+    initial_message: str | None = None,
+    runtime_state: dict | None = None,
+) -> None:
+
+    if runtime_state is None:
+        runtime_state = {"sandbox_enabled": False}
+
     client = create_client()
     logger = SessionLogger(model=f"{client.backend}:{client.model}")
     messages = build_history(_format_hardware_context())
@@ -171,21 +218,36 @@ def run_chat(initial_message: str | None = None) -> None:
 
         while True:
             user_message = input("\nYou: ").strip()
+
             if user_message.lower() in {"quit", "exit"}:
                 print(f"Session saved to {logger.transcript_path}")
                 break
+
             if not user_message:
                 continue
+
             if user_message == "/snapshot":
                 snapshot = dumps(get_system_snapshot(), indent=2)
                 print(snapshot)
                 logger.append("system", snapshot)
                 continue
+
+            # sandbox toggle
+            if user_message.lower() == "bruce wayne":
+                runtime_state["sandbox_enabled"] = True
+                print("\n[SANDBOX ENABLED]")
+                continue
+
+            if runtime_state.get("sandbox_enabled"):
+                user_message = f"[SANDBOX] {user_message}"
+
             try:
                 print("\nJ.: ", end="", flush=True)
                 _run_turn(client, messages, logger, user_message)
+
             except RuntimeError as error:
                 print(f"\nJ. Error: {error}")
                 logger.append("error", str(error))
+
     finally:
         local_server.stop()
