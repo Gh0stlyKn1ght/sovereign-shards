@@ -10,7 +10,7 @@ Standalone runtime timestamp: `2026-04-24T19:20:01.0890088-05:00`
 
 - shard-local `python.exe`
 - shard-local `llama.exe` and `server.exe`
-- local `brain.gguf` model path inside `models/`
+- local `J.gguf` model path inside `models/`
 - automatic `llama.cpp` server boot from Python
 - automatic hardware identity injection on boot
 - timestamped session transcripts under `logs/sessions/`
@@ -31,8 +31,8 @@ The default runtime is now local `llama.cpp` from inside this shard.
 RUNTIME_BACKEND=llama_cpp
 LLAMA_HOST=127.0.0.1
 LLAMA_PORT=8080
-LLAMA_MODEL_ALIAS=brain
-LLAMA_MODEL_PATH=models\brain.gguf
+LLAMA_MODEL_ALIAS=J
+LLAMA_MODEL_PATH=models\J.gguf
 LLAMA_SERVER_BINARY=model-server\server.exe
 LLAMA_CLI_BINARY=model-server\llama.exe
 LLAMA_STARTUP_TIMEOUT=120

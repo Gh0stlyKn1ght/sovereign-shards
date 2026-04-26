@@ -1,0 +1,16 @@
+{% for message in messages %}
+    {% if message['role'] == 'user' %}
+<|user|>
+{{ message['content'] }}
+<|end|>
+
+    {% elif message['role'] == 'J' %}
+<|J|>
+{{ message['content'] }}
+<|end|>
+
+    {% endif %}
+{% endfor %}
+{% if add_generation_prompt %}
+<|J|>
+{% endif %}

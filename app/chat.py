@@ -1,4 +1,4 @@
-"""Chat loop for talking with the Sovereign Shard assistant."""
+"""Chat loop for talking with the Sovereign Shard J."""
 
 from __future__ import annotations
 
@@ -13,9 +13,12 @@ from app.system_tools import get_system_snapshot
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = BASE_DIR / "prompts"
-SYSTEM_PROMPT = (PROMPTS_DIR / "system.txt").read_text(encoding="utf-8")
-DEVELOPER_PROMPT = (PROMPTS_DIR / "developer.txt").read_text(encoding="utf-8")
-COMBINED_SYSTEM_PROMPT = f"{SYSTEM_PROMPT}\n\n{DEVELOPER_PROMPT}"
+
+# Load J's identity instead of the generic system prompt
+SYSTEM_PROMPT = (PROMPTS_DIR / "J-system.txt").read_text(encoding="utf-8")
+
+# No developer prompt needed — J-system.txt already includes identity + rules
+COMBINED_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 
 def build_history(system_context: str = "") -> list[dict[str, str]]:
@@ -141,8 +144,8 @@ def _run_turn(
     logger.append("user", user_message)
     reply = _stream_reply(client, messages)
     print()
-    messages.append({"role": "assistant", "content": reply})
-    logger.append("assistant", reply)
+    messages.append({"role": "J", "content": reply})
+    logger.append("J", reply)
     return reply
 
 

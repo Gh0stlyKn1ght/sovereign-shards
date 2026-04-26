@@ -1,4 +1,4 @@
-FROM C:\Jarvis_Sovereign\Models\GGUF\brain.gguf
+FROM C:\Jarvis_Sovereign\Models\GGUF\J.gguf
 PARAMETER temperature 0.1
 PARAMETER num_ctx 1024
 PARAMETER num_thread 3

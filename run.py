@@ -29,7 +29,7 @@ def main() -> None:
         print(f"Python: {BASE_DIR / 'python.exe'}")
         print(f"Server: {BASE_DIR / 'model-server' / 'server.exe'}")
         print(f"CLI: {BASE_DIR / 'model-server' / 'llama.exe'}")
-        print(f"Model: {BASE_DIR / 'models' / 'brain.gguf'}")
+        print(f"Model: {BASE_DIR / 'models' / 'J.gguf'}")
         return
     run_chat(initial_message=args.message)
 

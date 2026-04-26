@@ -62,7 +62,7 @@ def create_client() -> RuntimeConfig:
     backend = os.getenv("RUNTIME_BACKEND", "llama_cpp").strip().lower()
     host = os.getenv("LLAMA_HOST", "127.0.0.1").strip()
     port = int(os.getenv("LLAMA_PORT", "8080"))
-    model = os.getenv("LLAMA_MODEL_ALIAS", os.getenv("OLLAMA_MODEL", "brain")).strip()
+    model = os.getenv("LLAMA_MODEL_ALIAS", os.getenv("OLLAMA_MODEL", "J")).strip()
     num_predict = int(os.getenv("OLLAMA_NUM_PREDICT", "256"))
     num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "1024"))
     num_thread = int(os.getenv("OLLAMA_NUM_THREAD", "2"))
@@ -73,10 +73,10 @@ def create_client() -> RuntimeConfig:
     keep_alive = os.getenv("OLLAMA_KEEP_ALIVE", "5m")
     require_gpu = os.getenv("REQUIRE_GPU", "false").lower() == "true"
     startup_timeout = int(os.getenv("LLAMA_STARTUP_TIMEOUT", "120"))
-    chat_template = os.getenv("LLAMA_CHAT_TEMPLATE", "brain").strip()
+    chat_template = os.getenv("LLAMA_CHAT_TEMPLATE", "J").strip()
     chat_template_file = _resolve_path(
         os.getenv("LLAMA_CHAT_TEMPLATE_FILE", ""),
-        "prompts\\brain-chat-template.jinja",
+        "prompts\\J-chat-template.jinja",
     )
     chat_template_kwargs = os.getenv(
         "LLAMA_CHAT_TEMPLATE_KWARGS",
@@ -88,14 +88,14 @@ def create_client() -> RuntimeConfig:
         token.strip()
         for token in os.getenv(
             "LLAMA_STOP_TOKENS",
-            "<|end|>,<|system|>,<|user|>,<|assistant|>",
+            "<|end|>",
         ).split(",")
         if token.strip()
     )
 
     model_path = _resolve_path(
         os.getenv("LLAMA_MODEL_PATH", ""),
-        "models\\brain.gguf",
+        "models\\J.gguf",
     )
     server_binary = _resolve_path(
         os.getenv("LLAMA_SERVER_BINARY", ""),

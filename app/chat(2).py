@@ -1,4 +1,4 @@
-"""Chat loop for talking with the J. assistant."""
+"""Chat loop for talking with the J. J."""
 
 from json import JSONDecodeError, dumps, loads
 from pathlib import Path
@@ -127,7 +127,7 @@ def run_chat(system_context: str = "") -> None:
                             break
             
             print() # Move to a new line when he's finished
-            messages.append({"role": "assistant", "content": full_reply})
+            messages.append({"role": "J", "content": full_reply})
 
             if not checked_gpu:
                 ensure_gpu_is_active(client)
