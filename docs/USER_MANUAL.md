@@ -51,7 +51,6 @@ Inside the chat loop:
 - `/snapshot` → print system snapshot JSON
 - `/help` → show command help
 - `/tools` → show available tool API names
-- `build <name> now` → fast-path scaffold via `run_scaffold` without waiting for model tool syntax
 
 All normal text is treated as natural-language chat.
 
@@ -77,8 +76,6 @@ Built-ins:
 - `system_snapshot()`
 
 Script tools are exposed as `run_<script_name>` (example: `tools/run/read.py` -> `run_read`).
-
-Script tool metadata (description + arg names) is read from `tools/run/registry.json` to improve tool selection and invocation quality.
 
 Tool chaining is supported in a bounded loop to avoid hangs.
 Built-in short breathers are inserted between tool steps to reduce sustained load on constrained hardware.
