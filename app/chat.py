@@ -288,6 +288,27 @@ def _run_turn(
     return reply
 
 
+
+
+def _handle_quick_build(user_message: str, registry: ToolRegistry, logger: SessionLogger) -> bool:
+    """Handle direct build scaffolding intents without requiring model tool-calling."""
+    lowered = user_message.strip().lower()
+    if not lowered.startswith("build "):
+        return False
+
+    target = user_message.strip()[6:].strip()
+    if target.endswith(" now"):
+        target = target[:-4].strip()
+
+    if not target:
+        print("J.: Please provide a project name, e.g. 'build starter_agent now'.")
+        return True
+
+    result = registry.execute("run_scaffold", [target])
+    print(f"J.: {result}")
+    logger.append("assistant", f"[QUICK BUILD] {result}")
+    return True
+
 def run_chat(
     initial_message: str | None = None,
     runtime_state: dict | None = None,
@@ -339,6 +360,9 @@ def run_chat(
                 snapshot = dumps(get_system_snapshot(), indent=2)
                 print(snapshot)
                 logger.append("system", snapshot)
+                continue
+
+            if _handle_quick_build(user_message, registry, logger):
                 continue
 
             # sandbox toggle
