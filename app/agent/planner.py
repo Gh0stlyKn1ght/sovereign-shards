@@ -3,15 +3,23 @@
 The planner asks the LLM to break a task into small, concrete steps,
 each with a success criterion. It parses the response into AgentStep objects.
 If parsing fails, it falls back to a single-step plan.
+
+Also handles forge detection: when a request implies a capability J lacks,
+the planner injects forge steps (research → generate → validate → register)
+ahead of the normal task steps.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Optional, TYPE_CHECKING
 
 from app.agent.contracts import AgentStep, AgentTask, AutonomyMode
+from app.agent.tool_researcher import needs_new_tool, ToolSpec
+
+if TYPE_CHECKING:
+    from app.agent.tool_registry import ToolRegistry
 
 
 PLAN_PROMPT = """You are a coding-agent planner. Given a user objective, break it into
@@ -35,6 +43,19 @@ User objective: {objective}
 def build_plan_prompt(objective: str) -> str:
     """Build the system prompt for the planner."""
     return PLAN_PROMPT.format(objective=objective)
+
+
+def check_forge_needed(
+    objective: str,
+    registry: "ToolRegistry",
+) -> bool:
+    """Quick check: does this objective need the tool forge?
+
+    Call this before planning.  If True, the caller should run the
+    forge pipeline (research → generate → validate → register) and
+    then re-plan with the new tools available.
+    """
+    return needs_new_tool(objective, registry)
 
 
 def parse_plan(raw: str, objective: str, mode: AutonomyMode = "semi") -> AgentTask:
