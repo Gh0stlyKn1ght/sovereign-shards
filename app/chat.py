@@ -1,4 +1,9 @@
-"""Chat loop for talking with the Sovereign Shard J."""
+"""Chat loop for the Sovereign Shard developer agent.
+
+Preserves the original version-1.0 interactive loop and streaming.
+Adds: RuntimeJsonLogger, TransportError, agent planner/executor/verifier,
+context trimming, autonomy modes, and the full dev-tool suite.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +15,28 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from app.agent import ToolRegistry
+from app.agent.context import trim_context, estimate_messages_tokens
+from app.agent.contracts import AgentTask, ToolCall
+from app.agent.executor import (
+    build_step_prompt,
+    execute_tool_call,
+    format_tool_result,
+    needs_confirmation,
+)
+from app.agent.planner import build_plan_prompt, parse_plan
+from app.agent.task_store import save_task, load_task
+from app.agent.verifier import build_verify_prompt, parse_verdict
 from app.client import RuntimeConfig, create_client
+from app.errors import TransportError
 from app.file_tools import list_dir, read_file, write_file
 from app.local_server import LocalLlamaServer
+from app.runtime_log import RuntimeJsonLogger
 from app.session import SessionLogger
 from app.system_tools import get_system_snapshot
 from core.fivemasters import evaluate_code
 
 PROCESS_PAUSE_SECONDS = 0.2
-
+MAX_TOOL_HOPS = 5  # raised from 3 for multi-step agent work
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = BASE_DIR / "prompts"
@@ -30,7 +48,7 @@ BASE_TOOL_INSTRUCTIONS = (
     "You may use a local tool when you need to inspect or modify the repository. "
     "When a tool is required, respond with exactly the following format:\n"
     "ACTION:\n"
-    "{\"tool\": \"<tool_name>\", \"args\": [arg1, arg2, ...]}\n"
+    '{"tool": "<tool_name>", "args": [arg1, arg2, ...]}\n'
     "Only use these tools when they are necessary. If no tool is needed, answer directly.\n"
     "Available tools:\n"
     "- read_file(path)\n"
@@ -39,6 +57,9 @@ BASE_TOOL_INSTRUCTIONS = (
     "- system_snapshot()\n"
     "All paths are relative to the shard root unless an absolute path is provided."
 )
+
+
+# ── Helpers ─────────────────────────────────────────────────────────
 
 
 def _assistant_role(client: RuntimeConfig) -> str:
@@ -58,8 +79,7 @@ def build_history(client: RuntimeConfig, registry: ToolRegistry, system_context:
         {
             "role": _system_role(client),
             "content": SYSTEM_PROMPT + _build_tool_instructions(registry) + (
-                f"\n\n[Context]\n{system_context}"
-                if system_context else ""
+                f"\n\n[Context]\n{system_context}" if system_context else ""
             ),
         }
     ]
@@ -97,6 +117,24 @@ def _execute_tool(action: dict, registry: ToolRegistry) -> str:
     return registry.execute(tool_name, tool_args)
 
 
+def _format_hardware_context() -> str:
+    snapshot = get_system_snapshot()
+    if snapshot.get("status") != "ONLINE":
+        return "[Sovereign Identity Unavailable]"
+
+    return (
+        "\n[Sovereign Identity Verified]\n"
+        f"Node: {snapshot['network']['node_name']}\n"
+        f"CPU: {snapshot['host_machine']['cpu']}\n"
+        f"Memory: {snapshot['live_metrics']['ram_usage_percent']} used of "
+        f"{snapshot['host_machine']['ram_total_gb']}GB\n"
+        f"Storage: {snapshot['live_metrics']['disk_free_gb']}GB free on local disk.\n"
+    )
+
+
+# ── Streaming ───────────────────────────────────────────────────────
+
+
 def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
     payload = {
         "model": client.model,
@@ -117,11 +155,10 @@ def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-
     try:
         return urlopen(request, timeout=300)
     except Exception as error:
-        raise RuntimeError(f"Connection failed: {error}") from error
+        raise TransportError("E_TRANSPORT", "Connection failed", str(error)) from error
 
 
 def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
@@ -141,38 +178,20 @@ def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-
     try:
         return urlopen(request, timeout=300)
     except Exception as error:
-        raise RuntimeError(f"Connection failed: {error}") from error
-
-
-def _format_hardware_context() -> str:
-    snapshot = get_system_snapshot()
-
-    if snapshot.get("status") != "ONLINE":
-        return "[Sovereign Identity Unavailable]"
-
-    return (
-        "\n[Sovereign Identity Verified]\n"
-        f"Node: {snapshot['network']['node_name']}\n"
-        f"CPU: {snapshot['host_machine']['cpu']}\n"
-        f"Memory: {snapshot['live_metrics']['ram_usage_percent']} used of "
-        f"{snapshot['host_machine']['ram_total_gb']}GB\n"
-        f"Storage: {snapshot['live_metrics']['disk_free_gb']}GB free on local disk.\n"
-    )
+        raise TransportError("E_TRANSPORT", "Connection failed", str(error)) from error
 
 
 def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
-    """Stream reply with safe interception layer."""
-    reply_chunks = []
+    """Stream reply with Five Masters gate."""
+    reply_chunks: list[str] = []
 
     def emit(token: str) -> None:
         print(token, end="", flush=True)
 
     def maybe_evaluate(content: str) -> str:
-        """Five Masters gate (SAFE, scoped, non-crashing)."""
         if "def " in content or "class " in content:
             try:
                 report = evaluate_code(content)
@@ -187,97 +206,110 @@ def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
             for raw_line in response:
                 if not raw_line:
                     continue
-
                 line = raw_line.decode("utf-8", errors="ignore").strip()
-
                 if not line.startswith("data:"):
                     continue
-
                 data = line[5:].strip()
-
                 if data == "[DONE]":
                     break
-
                 chunk = loads(data)
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
-
                 delta = choices[0].get("delta") or {}
                 content = delta.get("content") or ""
-
                 if not content:
                     continue
-
                 content = maybe_evaluate(content)
-
                 emit(content)
                 reply_chunks.append(content)
-
         return "".join(reply_chunks)
 
-    # --- fallback (ollama) ---
+    # Ollama fallback
     with _ollama_chat(client, messages) as response:
         full_reply = ""
         for line in response:
             if not line:
                 continue
-
             chunk = loads(line.decode("utf-8"))
-
             if "message" in chunk:
                 content = chunk["message"]["content"]
                 emit(content)
                 full_reply += content
-
             if chunk.get("done"):
                 break
-
         return full_reply
+
+
+# ── Turn execution ──────────────────────────────────────────────────
 
 
 def _run_turn(
     client: RuntimeConfig,
     messages: list[dict[str, str]],
     logger: SessionLogger,
+    rlog: RuntimeJsonLogger,
     user_message: str,
     registry: ToolRegistry,
+    autonomy_mode: str = "semi",
 ) -> str:
 
+    rlog.event("stage_start", stage="input")
     messages.append({"role": "user", "content": user_message})
     logger.append("user", user_message)
 
+    # Trim context before sending
+    messages[:] = trim_context(messages, max_tokens=client.num_ctx)
+
+    rlog.event("stage_start", stage="executor")
     assistant_role = _assistant_role(client)
     reply = _stream_reply(client, messages)
     print()
     messages.append({"role": assistant_role, "content": reply})
     logger.append("assistant", reply)
+    rlog.event("stage_start", stage="tool_loop")
 
-    # bounded tool loop for multi-step tool use in one user turn
-    for _ in range(3):
+    # Bounded tool loop
+    for hop in range(MAX_TOOL_HOPS):
         action = _extract_action(reply)
         if action is None:
-            return reply
+            break
 
+        tool_name = action.get("tool", "")
+
+        # Autonomy gate
+        if needs_confirmation(tool_name, registry, autonomy_mode):
+            effect = registry.get_side_effect(tool_name)
+            print(f"\n⚠ Tool '{tool_name}' [{effect}] requires confirmation.")
+            print(f"  Args: {action.get('args', [])}")
+            confirm = input("  Approve? (y/n): ").strip().lower()
+            if confirm != "y":
+                tool_result = f"[TOOL BLOCKED] User denied '{tool_name}'."
+                messages.append({"role": assistant_role, "content": tool_result})
+                logger.append("system", tool_result)
+                rlog.event("tool_blocked", tool=tool_name)
+                break
+
+        rlog.event("tool_call", tool=tool_name, hop=hop)
         tool_result = _execute_tool(action, registry)
         time.sleep(PROCESS_PAUSE_SECONDS)
+
         tool_response = (
             "[TOOL EXECUTION]\n"
             f"tool: {action.get('tool')}\n"
             f"args: {action.get('args', [])}\n"
             f"result:\n{tool_result}"
         )
-
         print(f"\n{tool_response}\n")
         messages.append({"role": assistant_role, "content": tool_response})
         logger.append("assistant", tool_response)
 
-        continuation_prompt = (
+        continuation = (
             "Continue your answer using the tool result above. "
             "Only invoke another tool if absolutely required."
         )
-        messages.append({"role": "user", "content": continuation_prompt})
-        logger.append("user", continuation_prompt)
+        messages.append({"role": "user", "content": continuation})
+        logger.append("user", continuation)
 
         time.sleep(PROCESS_PAUSE_SECONDS)
         reply = _stream_reply(client, messages)
@@ -285,33 +317,124 @@ def _run_turn(
         messages.append({"role": assistant_role, "content": reply})
         logger.append("assistant", reply)
 
+    rlog.event("turn_complete", chars=len(reply))
     return reply
 
 
+# ── Agent mode (plan → execute → verify) ────────────────────────────
+
+
+def _run_agent_task(
+    client: RuntimeConfig,
+    messages: list[dict[str, str]],
+    logger: SessionLogger,
+    rlog: RuntimeJsonLogger,
+    registry: ToolRegistry,
+    objective: str,
+    autonomy_mode: str = "semi",
+) -> str:
+    """Full agent loop: plan the task, execute each step, verify results."""
+
+    rlog.event("agent_start", objective=objective)
+
+    # 1. Plan
+    print("\n[PLANNING] Decomposing objective into steps...")
+    plan_prompt = build_plan_prompt(objective)
+    messages.append({"role": "user", "content": plan_prompt})
+    messages[:] = trim_context(messages, max_tokens=client.num_ctx)
+
+    plan_raw = _stream_reply(client, messages)
+    print()
+    messages.append({"role": _assistant_role(client), "content": plan_raw})
+    logger.append("assistant", f"[PLAN]\n{plan_raw}")
+
+    task = parse_plan(plan_raw, objective, mode=autonomy_mode)
+    task_id = logger.session_id
+    save_task(task, task_id)
+
+    print(f"\n[PLAN] {len(task.steps)} step(s):")
+    for step in task.steps:
+        marker = "✓" if step.id in task.completed_step_ids else "○"
+        print(f"  {marker} {step.id}: {step.goal}")
+
+    # 2. Execute each step
+    results_log: list[str] = []
+    for step in task.steps:
+        if step.id in task.completed_step_ids:
+            continue
+
+        print(f"\n{'='*50}")
+        print(f"[STEP {step.id}] {step.goal}")
+        print(f"[CRITERIA] {step.success_criteria}")
+        print("=" * 50)
+
+        step_prompt = build_step_prompt(step, registry.describe())
+        step_reply = _run_turn(
+            client, messages, logger, rlog, step_prompt, registry, autonomy_mode
+        )
+        results_log.append(f"[{step.id}] {step_reply[:500]}")
+
+        # 3. Verify
+        rlog.event("verify_start", step=step.id)
+        verify_prompt = build_verify_prompt(step.goal, step.success_criteria, step_reply)
+        messages.append({"role": "user", "content": verify_prompt})
+        messages[:] = trim_context(messages, max_tokens=client.num_ctx)
+
+        verify_raw = _stream_reply(client, messages)
+        print()
+        messages.append({"role": _assistant_role(client), "content": verify_raw})
+
+        passed, reason = parse_verdict(verify_raw)
+        status = "PASSED" if passed else "FAILED"
+        print(f"\n[VERIFY {status}] {step.id}: {reason}")
+        rlog.event("verify_done", step=step.id, passed=passed, reason=reason)
+        logger.append("system", f"[VERIFY {status}] {step.id}: {reason}")
+
+        if passed:
+            task.completed_step_ids.append(step.id)
+            task.artifacts.append(f"{step.id}: {reason}")
+            save_task(task, task_id)
+        else:
+            print(f"[STEP FAILED] {step.id} — stopping agent loop.")
+            rlog.event("agent_step_failed", step=step.id, reason=reason)
+            break
+
+    # Summary
+    done = len(task.completed_step_ids)
+    total = len(task.steps)
+    summary = f"\n[AGENT COMPLETE] {done}/{total} steps done. Task: {task_id}"
+    print(summary)
+    rlog.event("agent_complete", done=done, total=total, task_id=task_id)
+    logger.append("system", summary)
+    return summary
+
+
+# ── Quick build (preserved from version-1.0) ────────────────────────
 
 
 def _handle_quick_build(user_message: str, registry: ToolRegistry, logger: SessionLogger) -> bool:
-    """Handle direct build scaffolding intents without requiring model tool-calling."""
     lowered = user_message.strip().lower()
     if not lowered.startswith("build "):
         return False
-
     target = user_message.strip()[6:].strip()
     if target.endswith(" now"):
         target = target[:-4].strip()
-
     if not target:
         print("J.: Please provide a project name, e.g. 'build starter_agent now'.")
         return True
-
     result = registry.execute("run_scaffold", [target])
     print(f"J.: {result}")
     logger.append("assistant", f"[QUICK BUILD] {result}")
     return True
 
+
+# ── Main loop ────────────────────────────────────────────────────────
+
+
 def run_chat(
     initial_message: str | None = None,
     runtime_state: dict | None = None,
+    autonomy_mode: str = "semi",
 ) -> None:
 
     if runtime_state is None:
@@ -319,23 +442,26 @@ def run_chat(
 
     client = create_client()
     logger = SessionLogger(model=f"{client.backend}:{client.model}")
+    rlog = RuntimeJsonLogger(session_id=logger.session_id)
     registry = ToolRegistry(BASE_DIR)
     messages = build_history(client, registry, _format_hardware_context())
     local_server = LocalLlamaServer(client)
 
     try:
+        rlog.event("startup", backend=client.backend, model=client.model, mode=autonomy_mode)
         local_server.ensure_started()
 
         print(f"--- SOVEREIGN SHARD ONLINE [{logger.session_id}] ---")
         print(f"Backend: {client.backend}")
-        print(f"Model: {client.model}")
-        print("Commands: quit, exit, /snapshot, /help, /tools")
+        print(f"Model:   {client.model}")
+        print(f"Mode:    {autonomy_mode}")
+        print("Commands: quit, exit, /snapshot, /help, /tools, /plan <goal>, /index")
         if client.backend == "llama_cpp":
             print(f"Server log: {local_server.log_path}")
 
         if initial_message:
             print("\nJ.: ", end="", flush=True)
-            _run_turn(client, messages, logger, initial_message, registry)
+            _run_turn(client, messages, logger, rlog, initial_message, registry, autonomy_mode)
             return
 
         while True:
@@ -343,13 +469,24 @@ def run_chat(
 
             if user_message.lower() in {"quit", "exit"}:
                 print(f"Session saved to {logger.transcript_path}")
+                rlog.event("shutdown", reason="user_exit")
                 break
 
             if not user_message:
                 continue
 
             if user_message == "/help":
-                print("Commands: quit, exit, /snapshot, /help, /tools")
+                print(
+                    "Commands:\n"
+                    "  quit / exit      — end session\n"
+                    "  /snapshot        — show hardware snapshot\n"
+                    "  /tools           — list available tools\n"
+                    "  /plan <goal>     — enter agent mode (plan → execute → verify)\n"
+                    "  /index           — index the project directory\n"
+                    "  /mode <level>    — change autonomy (manual/semi/auto-safe/auto-full)\n"
+                    "  build <name>     — quick-scaffold a package\n"
+                    "  bruce wayne      — toggle sandbox"
+                )
                 continue
 
             if user_message == "/tools":
@@ -360,12 +497,40 @@ def run_chat(
                 snapshot = dumps(get_system_snapshot(), indent=2)
                 print(snapshot)
                 logger.append("system", snapshot)
+                rlog.event("snapshot")
+                continue
+
+            if user_message == "/index":
+                from app.agent.indexer import save_index
+                path = save_index(str(BASE_DIR))
+                print(f"[INDEX OK] Saved to {path}")
+                rlog.event("index_saved", path=path)
+                continue
+
+            if user_message.startswith("/mode "):
+                new_mode = user_message[6:].strip()
+                if new_mode in ("manual", "semi", "auto-safe", "auto-full"):
+                    autonomy_mode = new_mode
+                    print(f"[MODE] Autonomy set to: {autonomy_mode}")
+                    rlog.event("mode_change", mode=autonomy_mode)
+                else:
+                    print("[MODE ERROR] Valid modes: manual, semi, auto-safe, auto-full")
+                continue
+
+            if user_message.startswith("/plan "):
+                objective = user_message[6:].strip()
+                if objective:
+                    _run_agent_task(
+                        client, messages, logger, rlog, registry, objective, autonomy_mode
+                    )
+                else:
+                    print("Usage: /plan <describe your goal>")
                 continue
 
             if _handle_quick_build(user_message, registry, logger):
                 continue
 
-            # sandbox toggle
+            # Sandbox toggle
             if user_message.lower() == "bruce wayne":
                 runtime_state["sandbox_enabled"] = True
                 print("\n[SANDBOX ENABLED]")
@@ -376,11 +541,13 @@ def run_chat(
 
             try:
                 print("\nJ.: ", end="", flush=True)
-                _run_turn(client, messages, logger, user_message, registry)
-
-            except RuntimeError as error:
+                _run_turn(
+                    client, messages, logger, rlog, user_message, registry, autonomy_mode
+                )
+            except TransportError as error:
                 print(f"\nJ. Error: {error}")
                 logger.append("error", str(error))
+                rlog.event("error", code=error.code, message=error.message)
 
     finally:
         local_server.stop()

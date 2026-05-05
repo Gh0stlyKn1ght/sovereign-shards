@@ -1,18 +1,52 @@
 {
   "run_read": {
     "description": "Read a UTF-8 text file and print full contents.",
-    "args": ["path"]
+    "args": ["path"],
+    "side_effect": "read"
   },
   "run_write": {
     "description": "Write provided content to a UTF-8 text file.",
-    "args": ["path", "content"]
+    "args": ["path", "content"],
+    "side_effect": "write"
   },
   "run_exec": {
     "description": "Execute provided Python code in a subprocess.",
-    "args": ["code"]
+    "args": ["code"],
+    "side_effect": "exec"
   },
   "run_scaffold": {
     "description": "Create a package directory with __init__.py.",
-    "args": ["name"]
+    "args": ["name"],
+    "side_effect": "write"
+  },
+  "run_str_replace": {
+    "description": "Surgical find-and-replace in a file. Pass JSON on stdin: {\"path\": \"...\", \"old\": \"...\", \"new\": \"...\"}",
+    "args": ["json_payload"],
+    "side_effect": "write"
+  },
+  "run_bash": {
+    "description": "Execute a shell command with timeout. Pass command on stdin. Optional arg: timeout_seconds.",
+    "args": ["command"],
+    "side_effect": "exec"
+  },
+  "run_git": {
+    "description": "Git operations. Args: subcommand [args...]. Allowed: status, diff, log, add, commit, branch, checkout, stash, show, reset, rev-parse, remote.",
+    "args": ["subcommand", "...args"],
+    "side_effect": "exec"
+  },
+  "run_search": {
+    "description": "Regex search across files. Args: pattern [path] [--ext .py]. Respects .gitignore.",
+    "args": ["pattern", "path", "--ext"],
+    "side_effect": "read"
+  },
+  "run_tree": {
+    "description": "Recursive directory tree listing. Args: [path] [--depth N]. Default depth 4.",
+    "args": ["path", "--depth"],
+    "side_effect": "read"
+  },
+  "run_test": {
+    "description": "Run a test command and report pass/fail. Args: command.",
+    "args": ["command"],
+    "side_effect": "exec"
   }
 }
