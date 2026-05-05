@@ -1,78 +1,73 @@
-# Sovereign Shards
+# Sovereign Shards — J
 
-Windows-first local developer shard for J., built to run as a standalone folder
-from `E:\dev shard`.
+**A fully local developer agent that runs from a USB stick.**
 
-Build timestamp: `2026-04-24T15:00:33.6018063-05:00`
-Standalone runtime timestamp: `2026-04-24T19:20:01.0890088-05:00`
+J is a self-contained AI coding assistant built to operate on a 16 GB FAT32 Kingston USB 2.0 drive. No cloud. No API keys. No internet required. Plug in, launch, and build software.
 
-## What This Build Includes
+## What It Does
 
-- shard-local `python.exe`
-- shard-local `llama.exe` and `server.exe`
-- local `J.gguf` model path inside `models/`
-- automatic `llama.cpp` server boot from Python
-- automatic hardware identity injection on boot
-- timestamped session transcripts under `logs/sessions/`
-- one-shot mode for quick validation
-- local tool scripts under `tools/run/`
+J is a *developer agent* — not a chatbot. It reads files, writes code, runs tests, manages git, and plans multi-step tasks with dependency graphs. It uses a local GGUF language model as its brain and a structured tool loop (plan → execute → verify) to complete real engineering work.
 
-## Setup
-
-Install the Python dependencies:
-
-```powershell
-py -m pip install -r requirements.txt
+```
+You  ─→  J  ─→  Plan steps  ─→  Execute tools  ─→  Verify results
+              ↕                 ↕                   ↕
+         Working Memory     Tool Registry       Task Checkpoint
 ```
 
-The default runtime is now local `llama.cpp` from inside this shard.
+## Quick Start
 
-```env
-RUNTIME_BACKEND=llama_cpp
-LLAMA_HOST=127.0.0.1
-LLAMA_PORT=8080
-LLAMA_MODEL_ALIAS=J
-LLAMA_MODEL_PATH=models\J.gguf
-LLAMA_SERVER_BINARY=model-server\server.exe
-LLAMA_CLI_BINARY=model-server\llama.exe
-LLAMA_STARTUP_TIMEOUT=120
-OLLAMA_NUM_PREDICT=256
-OLLAMA_NUM_CTX=1024
-OLLAMA_NUM_THREAD=2
-OLLAMA_TEMPERATURE=0.2
-REQUIRE_GPU=false
+```bash
+# 1. Plug in the USB drive (e.g. E:\)
+# 2. Navigate to the shard
+cd "E:\sovereign-shards"
+
+# 3. Preflight check
+python run.py --doctor
+
+# 4. Launch
+python run.py
 ```
 
-## Run
+That's it. J starts the local model server, loads the GGUF brain, and drops you into an interactive session. See [docs/USER_MANUAL.md](docs/USER_MANUAL.md) for the full production guide.
 
-Interactive mode:
+## Architecture
 
-```powershell
-.\python.exe run.py
+| Layer | What | Files |
+|-------|------|-------|
+| **Runtime** | Dual-backend streaming (llama.cpp + Ollama), local server lifecycle, hardware identity | `app/client.py`, `app/local_server.py`, `app/system_tools.py` |
+| **Brain** | Plan → Execute → Verify agent loop with DAG task graphs | `app/agent/planner.py`, `app/agent/executor.py`, `app/agent/verifier.py`, `app/agent/graph.py` |
+| **Memory** | 3-tier active context reconstruction with BM25 retrieval | `app/agent/context.py`, `app/agent/working_memory.py`, `app/agent/memory.py`, `app/agent/retriever.py` |
+| **Tools** | 10 auto-discovered dev tools (file, shell, git, search, test) | `tools/run/*.py`, `app/agent/tool_registry.py` |
+| **Governance** | Five Masters code quality heuristics, sandbox mode | `core/fivemasters.py`, `app/chat.py` |
+| **Logging** | Structured JSONL runtime logs, session transcripts, rotation | `app/runtime_log.py`, `app/session.py` |
+| **Contracts** | Typed dataclasses, autonomy modes, error taxonomy | `app/agent/contracts.py`, `app/errors.py` |
+
+## Hardware Requirements
+
+| Spec | Minimum | Recommended |
+|------|---------|-------------|
+| Drive | 16 GB USB 2.0, FAT32 | Same |
+| RAM | 8 GB | 16 GB |
+| CPU | 4 cores | 8+ cores |
+| GPU | Not required | Any with 6+ GB VRAM (optional) |
+| OS | Windows 10+ | Windows 10/11 |
+| Python | 3.10+ | 3.12+ |
+
+## Dependencies
+
+```
+python-dotenv
+psutil
 ```
 
-One-shot mode:
+That's it. Two packages. Everything else is stdlib.
 
-```powershell
-.\python.exe run.py --message "Report system status."
+## Project Stats
+
+```
+29 Python files  ·  3,089 lines  ·  2 dependencies  ·  zero network calls
 ```
 
-Show the exact local runtime paths:
+## License
 
-```powershell
-.\python.exe run.py --paths
-```
-
-Start the local server manually:
-
-```powershell
-.\start-server.bat
-```
-
-Run the local CLI manually:
-
-```powershell
-.\run-llama.bat
-```
-
-Each session writes a timestamped transcript and metadata file into `logs/sessions/`.
+See repository for license terms.
