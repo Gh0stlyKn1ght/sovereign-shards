@@ -89,11 +89,12 @@ def reconstruct_context(
 ) -> list[dict[str, str]]:
     """Assemble active context from all three memory tiers.
 
-    1. Keep the system message (tools, persona).
+    1. Keep the system message (tools, persona) as a single atomic block.
     2. Inject relevant *working memory* entries (Tier 2) via BM25.
     3. Inject relevant *long-term memory* entries (Tier 3) via BM25.
-    4. Keep recent conversation messages.
-    5. Trim to fit the token budget.
+    4. Memory is merged INTO the system message — never a separate message.
+    5. Keep recent conversation messages.
+    6. Trim to fit the token budget.
     """
     from app.agent import working_memory
     from app.agent.memory import recall_all
@@ -128,17 +129,17 @@ def reconstruct_context(
         return trim_context(messages, max_tokens=max_tokens)
 
     mem_block = "\n\n".join(sections)
-    mem_msg: dict[str, str] = {"role": "system", "content": mem_block}
 
-    # Insert memory block right after the first system message
+    # Merge memory INTO the first system message so trim_context never
+    # drops J's identity.  System messages are always preserved.
     injected = list(messages)
-    insert_at = 0
-    for i, m in enumerate(injected):
-        if m.get("role") != "system":
-            insert_at = i
-            break
+    if injected and injected[0].get("role") == "system":
+        injected[0] = {
+            "role": "system",
+            "content": injected[0]["content"] + "\n\n" + mem_block,
+        }
     else:
-        insert_at = len(injected)
-    injected.insert(insert_at, mem_msg)
+        # No system message at front — prepend one
+        injected.insert(0, {"role": "system", "content": mem_block})
 
     return trim_context(injected, max_tokens=max_tokens)
