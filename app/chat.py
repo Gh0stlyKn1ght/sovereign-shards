@@ -583,7 +583,7 @@ def run_chat(
         print(f"Backend: {client.backend}")
         print(f"Model:   {client.model}")
         print(f"Mode:    {autonomy_mode}")
-        print("Commands: quit, exit, /help, /tools, /plan, /model, /mode, /memory, /snapshot, /sandbox, /refactor, /report")
+        print("Commands: quit, exit, /help, /tools, /plan, /model, /mode, /memory, /snapshot, /sandbox, /refactor, /optimize, /report")
         if client.backend == "llama_cpp":
             print(f"Server log: {local_server.log_path}")
 
@@ -617,6 +617,7 @@ def run_chat(
                     "  /reflect         — manually compress working memory\n"
                     "  /integrity       — check file integrity against baseline\n"
                     "  /refactor        — cross-file AST analysis (dead code, circles, shadows)\n"
+                    "  /optimize [path] — Five Masters code optimizer (deterministic + LLM)\n"
                     "  /report          — generate HTML task report (opens in browser)\n"
                     "  /sandbox         — run pre-push validation (syntax, parse, tests, quality)\n"
                     "  build <name>     — quick-scaffold a package\n"
@@ -729,6 +730,65 @@ def run_chat(
                 except Exception as exc:
                     print(f"[SANDBOX ERROR] {exc}")
                 rlog.event("sandbox_validation")
+                continue
+
+            if user_message.startswith("/optimize"):
+                parts = user_message.split(maxsplit=1)
+                target = parts[1].strip() if len(parts) > 1 else str(Path.cwd())
+                dry_run = "--dry-run" in target
+                no_model = "--no-model" in target
+                show_diff = "--diff" in target
+                target = target.replace("--dry-run", "").replace("--no-model", "").replace("--diff", "").strip()
+                if not target:
+                    target = str(Path.cwd())
+
+                print(f"\n[OPTIMIZE] Five Masters Code Optimizer")
+                print(f"  Target: {target}")
+                if dry_run:
+                    print("  Mode: dry-run (report only)")
+                if no_model:
+                    print("  Mode: deterministic only (no LLM)")
+
+                try:
+                    from app.agent.optimizer import optimize_file, optimize_directory, batch_summary
+                    target_path = Path(target).resolve()
+                    if target_path.is_file():
+                        result = optimize_file(
+                            str(target_path),
+                            dry_run=dry_run,
+                            use_model=not no_model,
+                        )
+                        print(result.summary())
+                        if show_diff and not result.reverted:
+                            d = result.diff()
+                            if d:
+                                print(f"\n{d}")
+                        if not dry_run and not result.reverted:
+                            if result.optimized_source != result.original_source:
+                                target_path.write_text(result.optimized_source, encoding="utf-8")
+                                print(f"\n  ✓ Written to {target_path}")
+                    elif target_path.is_dir():
+                        results = optimize_directory(
+                            str(target_path),
+                            dry_run=dry_run,
+                            use_model=not no_model,
+                        )
+                        print(batch_summary(results))
+                        if not dry_run:
+                            written = 0
+                            for r in results:
+                                if not r.reverted and r.optimized_source != r.original_source:
+                                    fpath = target_path / r.file_path
+                                    if fpath.is_file():
+                                        fpath.write_text(r.optimized_source, encoding="utf-8")
+                                        written += 1
+                            if written:
+                                print(f"\n  ✓ {written} file(s) updated")
+                    else:
+                        print(f"  ✗ Not found: {target}")
+                except Exception as exc:
+                    print(f"[OPTIMIZE ERROR] {exc}")
+                rlog.event("optimize")
                 continue
 
             if user_message == "/refactor":
