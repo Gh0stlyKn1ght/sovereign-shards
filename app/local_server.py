@@ -1,4 +1,7 @@
-"""Helpers for running a local llama.cpp server from the shard itself."""
+"""Helpers for running a local llama.cpp server from the shard itself.
+
+Supports Vulkan GPU offload, CPU-only fallback, and memory-conscious defaults.
+"""
 
 from __future__ import annotations
 
@@ -37,6 +40,55 @@ class LocalLlamaServer:
         except Exception:
             return False
 
+    def _build_command(self) -> list[str]:
+        """Build the llama-server command line with hardware-aware flags."""
+        cfg = self.config
+
+        command = [
+            str(cfg.server_binary),
+            "--model", str(cfg.model_path),
+            "--host", cfg.host,
+            "--port", str(cfg.port),
+            "--ctx-size", str(cfg.num_ctx),
+            "--threads", str(cfg.num_thread),
+            "--batch-size", str(cfg.batch_size),
+            "--temp", str(cfg.temperature),
+            "--top-p", str(cfg.top_p),
+            "--top-k", str(cfg.top_k),
+            "--min-p", str(cfg.min_p),
+            "--alias", cfg.model,
+            "--jinja",
+            "--chat-template-file", str(cfg.chat_template_file),
+            "--reasoning-budget", str(cfg.reasoning_budget),
+            "--reasoning-format", cfg.reasoning_format,
+            "--n-predict", str(cfg.num_predict),
+            "--no-warmup",
+            "--no-webui",
+        ]
+
+        # ── GPU / Device offload ──────────────────────────────────
+        # gpu_device: "auto" = let llama.cpp detect (Vulkan, CUDA, Metal)
+        #             "vulkan" = force Vulkan
+        #             "cuda"   = force CUDA
+        #             "none"   = CPU only, no GPU
+        device = cfg.gpu_device
+
+        if device == "none":
+            command.extend(["--device", "none"])
+        else:
+            # Set device hint (auto lets the binary probe)
+            if device != "auto":
+                command.extend(["--device", device])
+            # Offload layers to GPU — 999 means "all of them"
+            if cfg.gpu_layers > 0:
+                command.extend(["--gpu-layers", str(cfg.gpu_layers)])
+
+        # ── Chat template kwargs ──────────────────────────────────
+        if cfg.chat_template_kwargs:
+            command.extend(["--chat-template-kwargs", cfg.chat_template_kwargs])
+
+        return command
+
     def ensure_started(self) -> None:
         """Start the shard-local server if this backend needs one."""
         if self.config.backend != "llama_cpp":
@@ -50,55 +102,19 @@ class LocalLlamaServer:
         if not self.config.model_path.exists():
             raise RuntimeError(f"Missing model file: {self.config.model_path}")
 
-        command = [
-            str(self.config.server_binary),
-            "--model",
-            str(self.config.model_path),
-            "--device",
-            "none",
-            "--host",
-            self.config.host,
-            "--port",
-            str(self.config.port),
-            "--ctx-size",
-            str(self.config.num_ctx),
-            "--threads",
-            str(self.config.num_thread),
-            "--temp",
-            str(self.config.temperature),
-            "--top-p",
-            str(self.config.top_p),
-            "--top-k",
-            str(self.config.top_k),
-            "--min-p",
-            str(self.config.min_p),
-            "--alias",
-            self.config.model,
-            "--jinja",
-            "--chat-template-file",
-            str(self.config.chat_template_file),
-            "--reasoning-budget",
-            str(self.config.reasoning_budget),
-            "--reasoning-format",
-            self.config.reasoning_format,
-            "--n-predict",
-            str(self.config.num_predict),
-            "--no-warmup",
-            "--no-webui",
-        ]
-        if self.config.chat_template_kwargs:
-            command.extend(
-                [
-                    "--chat-template-kwargs",
-                    self.config.chat_template_kwargs,
-                ]
-            )
+        command = self._build_command()
 
         env = os.environ.copy()
         env["PATH"] = f"{self.config.server_binary.parent}{os.pathsep}{env.get('PATH', '')}"
         if not self.config.chat_template_kwargs:
             env.pop("LLAMA_CHAT_TEMPLATE_KWARGS", None)
+
         self.log_handle = self.log_path.open("w", encoding="utf-8")
+
+        # Log the exact command for debugging
+        self.log_handle.write(f"CMD: {' '.join(command)}\n\n")
+        self.log_handle.flush()
+
         self.process = subprocess.Popen(
             command,
             cwd=self.config.server_binary.parent,

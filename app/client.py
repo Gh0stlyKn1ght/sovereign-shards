@@ -41,6 +41,9 @@ class RuntimeConfig:
     min_p: float
     keep_alive: str
     require_gpu: bool
+    gpu_layers: int
+    gpu_device: str
+    batch_size: int
     startup_timeout: int
     chat_template: str
     chat_template_file: Path
@@ -72,6 +75,9 @@ def create_client() -> RuntimeConfig:
     min_p = float(os.getenv("LLAMA_MIN_P", "0"))
     keep_alive = os.getenv("OLLAMA_KEEP_ALIVE", "5m")
     require_gpu = os.getenv("REQUIRE_GPU", "false").lower() == "true"
+    gpu_layers = int(os.getenv("GPU_LAYERS", "999"))
+    gpu_device = os.getenv("GPU_DEVICE", "auto").strip().lower()
+    batch_size = int(os.getenv("LLAMA_BATCH_SIZE", "512"))
     startup_timeout = int(os.getenv("LLAMA_STARTUP_TIMEOUT", "120"))
     chat_template = os.getenv("LLAMA_CHAT_TEMPLATE", "J").strip()
     chat_template_file = _resolve_path(
@@ -123,6 +129,9 @@ def create_client() -> RuntimeConfig:
         min_p=min_p,
         keep_alive=keep_alive,
         require_gpu=require_gpu,
+        gpu_layers=gpu_layers,
+        gpu_device=gpu_device,
+        batch_size=batch_size,
         startup_timeout=startup_timeout,
         chat_template=chat_template,
         chat_template_file=chat_template_file,
