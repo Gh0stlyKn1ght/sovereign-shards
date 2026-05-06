@@ -41,6 +41,7 @@ from app.local_server import LocalLlamaServer
 from app.runtime_log import RuntimeJsonLogger
 from app.session import SessionLogger
 from app.system_tools import get_system_snapshot
+from app.router import route as fast_route
 from core.fivemasters import evaluate_code
 
 PROCESS_PAUSE_SECONDS = 0.2
@@ -742,6 +743,16 @@ def run_chat(
 
             if runtime_state.get("sandbox_enabled"):
                 user_message = f"[SANDBOX] {user_message}"
+
+            # ── Fast Router: intercept direct commands before LLM ──
+            route_result = fast_route(user_message, registry)
+            if route_result.handled:
+                print(f"\n[{route_result.tool_name}] {route_result.output}")
+                logger.append("system", f"[ROUTED] {route_result.tool_name}: {route_result.output[:500]}")
+                rlog.event("fast_route", tool=route_result.tool_name)
+                wm_entry = working_memory.compress_turn(user_message, route_result.output)
+                working_memory.append(**wm_entry)
+                continue
 
             try:
                 print("\nJ.: ", end="", flush=True)

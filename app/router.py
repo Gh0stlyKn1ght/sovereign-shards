@@ -1,0 +1,153 @@
+"""Fast deterministic command router — sits BEFORE the LLM.
+
+Intercepts direct commands, shell invocations, and tool prefixes so the
+language model only touches input that genuinely needs reasoning.
+Zero inference cost for anything the router handles.
+"""
+
+from __future__ import annotations
+
+import re
+import shlex
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.agent.tool_registry import ToolRegistry
+
+
+@dataclass
+class RouteResult:
+    """Outcome of the fast router."""
+
+    handled: bool            # True → router executed it, skip LLM
+    tool_name: str = ""      # which tool was dispatched
+    tool_args: list = None   # args passed
+    output: str = ""         # tool output (if handled)
+
+    def __post_init__(self):
+        if self.tool_args is None:
+            self.tool_args = []
+
+
+# ── Pattern matchers ────────────────────────────────────────────────
+
+# Obvious shell commands (prefixes that are unambiguous)
+_SHELL_PREFIXES = (
+    "python ", "python3 ", "pip ", "pip3 ",
+    "git ", "ls ", "cat ", "cd ", "mkdir ", "rm ", "mv ", "cp ",
+    "find ", "grep ", "head ", "tail ", "wc ", "chmod ", "touch ",
+    "echo ", "pwd", "tree ", "which ", "curl ", "wget ",
+    "npm ", "node ", "cargo ", "make ", "cmake ",
+    "docker ", "pytest ", "bash ", "sh ",
+)
+
+# Explicit tool-call syntax: run_bash <cmd>, run_read <path>, etc.
+_TOOL_PREFIX_RE = re.compile(r"^(run_\w+)\s*(.*)", re.DOTALL)
+
+# Looks like a file path operation
+_PATH_OP_RE = re.compile(
+    r"^(read|write|cat|show|open|view|display)\s+([^\s]+\.\w+)",
+    re.IGNORECASE,
+)
+
+# Inline code fence that should be executed: ```bash ... ```
+_CODE_FENCE_RE = re.compile(
+    r"^```(?:bash|sh|shell|python)?\s*\n(.+?)\n```$",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def route(user_input: str, registry: "ToolRegistry") -> RouteResult:
+    """Attempt to deterministically route the input. Returns handled=False
+    if the input needs the LLM."""
+
+    stripped = user_input.strip()
+    lowered = stripped.lower()
+
+    # ── 1. Slash commands are handled elsewhere (return unhandled) ──
+    if stripped.startswith("/"):
+        return RouteResult(handled=False)
+
+    # ── 2. Explicit run_* tool prefix ───────────────────────────────
+    m = _TOOL_PREFIX_RE.match(stripped)
+    if m:
+        tool_name = m.group(1)
+        rest = m.group(2).strip()
+        if tool_name in registry.tools:
+            args = _split_args(rest) if rest else []
+            output = registry.execute(tool_name, args)
+            return RouteResult(
+                handled=True,
+                tool_name=tool_name,
+                tool_args=args,
+                output=output,
+            )
+
+    # ── 3. Obvious shell commands → run_bash ────────────────────────
+    if any(lowered.startswith(p) for p in _SHELL_PREFIXES) or lowered == "pwd":
+        return _dispatch_bash(stripped, registry)
+
+    # ── 4. Bare command with known executable pattern ───────────────
+    #    e.g. "python -m unittest discover -s tests -v"
+    if re.match(r"^[\w./-]+\s+-", stripped) and _looks_like_command(stripped):
+        return _dispatch_bash(stripped, registry)
+
+    # ── 5. Code fence with bash/python ──────────────────────────────
+    m = _CODE_FENCE_RE.match(stripped)
+    if m:
+        return _dispatch_bash(m.group(1).strip(), registry)
+
+    # ── 6. Path-based read: "read run.py", "cat app/chat.py" ───────
+    m = _PATH_OP_RE.match(stripped)
+    if m:
+        verb = m.group(1).lower()
+        path = m.group(2)
+        if verb in ("read", "cat", "show", "open", "view", "display"):
+            if "run_read" in registry.tools:
+                output = registry.execute("run_read", [path])
+                return RouteResult(handled=True, tool_name="run_read",
+                                   tool_args=[path], output=output)
+            elif "read_file" in registry.tools:
+                output = registry.execute("read_file", [path])
+                return RouteResult(handled=True, tool_name="read_file",
+                                   tool_args=[path], output=output)
+
+    # ── 7. No match → fall through to LLM ──────────────────────────
+    return RouteResult(handled=False)
+
+
+# ── Internal helpers ────────────────────────────────────────────────
+
+def _dispatch_bash(command: str, registry: "ToolRegistry") -> RouteResult:
+    """Route a shell command to the bash tool."""
+    # Prefer run_bash, fall back to run_exec
+    for tool in ("run_bash", "run_exec"):
+        if tool in registry.tools:
+            output = registry.execute(tool, [command])
+            return RouteResult(
+                handled=True, tool_name=tool,
+                tool_args=[command], output=output,
+            )
+    # No bash tool available — can't handle
+    return RouteResult(handled=False)
+
+
+def _split_args(text: str) -> list[str]:
+    """Shell-aware argument splitting."""
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
+def _looks_like_command(text: str) -> bool:
+    """Heuristic: does this look like a CLI invocation?"""
+    first_word = text.split()[0] if text.split() else ""
+    # Ends with known executable extension or is a known command pattern
+    if "/" in first_word or first_word.endswith((".py", ".sh", ".bat", ".exe")):
+        return True
+    # Has flags (dashes)
+    if " -" in text:
+        return True
+    return False
