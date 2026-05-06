@@ -439,3 +439,145 @@ class TestOptimizeDirectory:
             files = [r.file_path for r in results]
             assert len(results) == 1
             assert "cached" not in str(files)
+
+
+# ── Ritchie transform tests ──────────────────────────────────────────
+
+from app.agent.transforms import (
+    fix_naming_funcs,
+    fix_naming_classes,
+)
+
+
+class TestRitchieFuncNames:
+    """Ritchie: camelCase functions → snake_case."""
+
+    def test_camel_to_snake(self):
+        code = textwrap.dedent("""\
+            def processData(items):
+                return items
+
+            def getUserName():
+                return "test"
+        """)
+        tree = ast.parse(code)
+        new_tree, results = fix_naming_funcs(tree)
+        output = ast.unparse(new_tree)
+        assert "process_data" in output
+        assert "get_user_name" in output
+        assert "processData" not in output
+        assert "getUserName" not in output
+        assert len(results) == 2
+
+    def test_already_snake_case(self):
+        code = textwrap.dedent("""\
+            def process_data(items):
+                return items
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_funcs(tree)
+        assert len(results) == 0
+
+    def test_dunder_untouched(self):
+        code = textwrap.dedent("""\
+            def __init__(self):
+                pass
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_funcs(tree)
+        assert len(results) == 0
+
+    def test_private_untouched(self):
+        code = textwrap.dedent("""\
+            def _helperMethod(self):
+                pass
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_funcs(tree)
+        assert len(results) == 0
+
+    def test_call_sites_updated(self):
+        code = textwrap.dedent("""\
+            def processData(items):
+                return items
+
+            result = processData([1, 2, 3])
+        """)
+        tree = ast.parse(code)
+        new_tree, results = fix_naming_funcs(tree)
+        output = ast.unparse(new_tree)
+        assert "process_data([1, 2, 3])" in output
+        assert "processData" not in output
+
+    def test_all_caps_untouched(self):
+        code = textwrap.dedent("""\
+            def CONSTANT():
+                return 42
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_funcs(tree)
+        assert len(results) == 0
+
+
+class TestRitchieClassNames:
+    """Ritchie: snake_case classes → PascalCase."""
+
+    def test_snake_to_pascal(self):
+        code = textwrap.dedent("""\
+            class my_handler:
+                pass
+        """)
+        tree = ast.parse(code)
+        new_tree, results = fix_naming_classes(tree)
+        output = ast.unparse(new_tree)
+        assert "class MyHandler" in output
+        assert "my_handler" not in output
+        assert len(results) == 1
+
+    def test_already_pascal(self):
+        code = textwrap.dedent("""\
+            class MyHandler:
+                pass
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_classes(tree)
+        assert len(results) == 0
+
+    def test_references_updated(self):
+        code = textwrap.dedent("""\
+            class data_processor:
+                def run(self):
+                    pass
+
+            obj = data_processor()
+        """)
+        tree = ast.parse(code)
+        new_tree, results = fix_naming_classes(tree)
+        output = ast.unparse(new_tree)
+        assert "DataProcessor()" in output
+        assert "data_processor" not in output
+
+    def test_private_class_untouched(self):
+        code = textwrap.dedent("""\
+            class _internal_helper:
+                pass
+        """)
+        tree = ast.parse(code)
+        _, results = fix_naming_classes(tree)
+        assert len(results) == 0
+
+    def test_combined_output_valid(self):
+        code = textwrap.dedent("""\
+            class my_parser:
+                def parseInput(self, raw):
+                    return raw.strip()
+
+            p = my_parser()
+            result = p.parseInput("  hello  ")
+        """)
+        tree = ast.parse(code)
+        new_tree, _ = apply_all_deterministic(tree)
+        output = ast.unparse(new_tree)
+        ast.parse(output)  # Must still be valid Python
+        assert "MyParser" in output
+        assert "parse_input" in output

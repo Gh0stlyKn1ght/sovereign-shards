@@ -9,11 +9,14 @@ Transforms:
   fix_silent_except    (Torvalds)    — except Exception (no log) → + log
   fix_mutable_default  (Carmack)     — def f(x=[]) → def f(x=None) + guard
   fix_unguarded_io     (Hamilton)    — open() outside try → wrap in try
+  fix_naming_funcs     (Ritchie)     — camelCase functions → snake_case
+  fix_naming_classes   (Ritchie)     — snake_case classes  → PascalCase
 """
 
 from __future__ import annotations
 
 import ast
+import re as _re
 import copy
 import textwrap
 from dataclasses import dataclass
@@ -451,6 +454,154 @@ def fix_unguarded_io(tree: ast.Module) -> tuple[ast.Module, list[TransformResult
     return new_tree, rewriter.changes
 
 
+# ── Ritchie: Clarity ──────────────────────────────────────────────────
+
+# Naming convention helpers (pure-stdlib, no external deps)
+
+def _camel_to_snake(name: str) -> str:
+    """Convert camelCase or PascalCase to snake_case."""
+    # Insert _ before sequences like 'aB' → 'a_B', or 'ABc' → 'A_Bc'
+    s1 = _re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    s2 = _re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", s1)
+    return s2.lower()
+
+
+def _snake_to_pascal(name: str) -> str:
+    """Convert snake_case to PascalCase."""
+    return "".join(part.capitalize() for part in name.split("_") if part)
+
+
+def _is_camel_case_func(name: str) -> bool:
+    """Return True if name looks like camelCase (not snake_case or dunder)."""
+    if name.startswith("_"):
+        return False
+    if "_" in name:
+        return False
+    if name.isupper():
+        return False
+    if name == name.lower():
+        return False
+    # Has at least one uppercase after a lowercase → camelCase
+    return bool(_re.search(r"[a-z][A-Z]", name))
+
+
+def _is_snake_case_class(name: str) -> bool:
+    """Return True if name uses snake_case (not PascalCase) for a class."""
+    if "_" not in name:
+        return False
+    if name.startswith("_"):
+        return False
+    return name[0].islower()
+
+
+class _FuncNameRewriter(ast.NodeTransformer):
+    """Rename camelCase function definitions and all call-sites to snake_case."""
+
+    def __init__(self) -> None:
+        self.rename_map: dict[str, str] = {}  # old → new
+        self.changes: list[TransformResult] = []
+
+    # --- Pass 1: collect renames from FunctionDef ---
+    def scan(self, tree: ast.Module) -> None:
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if _is_camel_case_func(node.name):
+                    new_name = _camel_to_snake(node.name)
+                    if new_name != node.name:
+                        self.rename_map[node.name] = new_name
+
+    # --- Pass 2: apply renames everywhere ---
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        self.generic_visit(node)
+        if node.name in self.rename_map:
+            old = node.name
+            node.name = self.rename_map[old]
+            self.changes.append(TransformResult(
+                applied=True,
+                description=f"def {old}() → def {node.name}()",
+                master="ritchie",
+                line=node.lineno,
+            ))
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if node.id in self.rename_map:
+            node.id = self.rename_map[node.id]
+        return node
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        self.generic_visit(node)
+        if node.attr in self.rename_map:
+            node.attr = self.rename_map[node.attr]
+        return node
+
+
+class _ClassNameRewriter(ast.NodeTransformer):
+    """Rename snake_case class definitions and all references to PascalCase."""
+
+    def __init__(self) -> None:
+        self.rename_map: dict[str, str] = {}
+        self.changes: list[TransformResult] = []
+
+    def scan(self, tree: ast.Module) -> None:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                if _is_snake_case_class(node.name):
+                    new_name = _snake_to_pascal(node.name)
+                    if new_name != node.name:
+                        self.rename_map[node.name] = new_name
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:
+        self.generic_visit(node)
+        if node.name in self.rename_map:
+            old = node.name
+            node.name = self.rename_map[old]
+            self.changes.append(TransformResult(
+                applied=True,
+                description=f"class {old} → class {node.name}",
+                master="ritchie",
+                line=node.lineno,
+            ))
+        return node
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if node.id in self.rename_map:
+            node.id = self.rename_map[node.id]
+        return node
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        self.generic_visit(node)
+        if node.attr in self.rename_map:
+            node.attr = self.rename_map[node.attr]
+        return node
+
+
+def fix_naming_funcs(tree: ast.Module) -> tuple[ast.Module, list[TransformResult]]:
+    """Rename camelCase functions to snake_case (Ritchie: Clarity)."""
+    rewriter = _FuncNameRewriter()
+    new_tree = copy.deepcopy(tree)
+    rewriter.scan(new_tree)
+    if not rewriter.rename_map:
+        return new_tree, []
+    new_tree = rewriter.visit(new_tree)
+    ast.fix_missing_locations(new_tree)
+    return new_tree, rewriter.changes
+
+
+def fix_naming_classes(tree: ast.Module) -> tuple[ast.Module, list[TransformResult]]:
+    """Rename snake_case classes to PascalCase (Ritchie: Clarity)."""
+    rewriter = _ClassNameRewriter()
+    new_tree = copy.deepcopy(tree)
+    rewriter.scan(new_tree)
+    if not rewriter.rename_map:
+        return new_tree, []
+    new_tree = rewriter.visit(new_tree)
+    ast.fix_missing_locations(new_tree)
+    return new_tree, rewriter.changes
+
+
 # ── Master Pipeline ──────────────────────────────────────────────────
 
 
@@ -461,6 +612,8 @@ DETERMINISTIC_TRANSFORMS = [
     ("torvalds", "silent_except", fix_silent_except),
     ("carmack", "mutable_default", fix_mutable_default),
     ("hamilton", "unguarded_io", fix_unguarded_io),
+    ("ritchie", "naming_funcs", fix_naming_funcs),
+    ("ritchie", "naming_classes", fix_naming_classes),
 ]
 
 
