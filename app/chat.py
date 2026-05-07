@@ -214,6 +214,19 @@ def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
         raise TransportError("E_TRANSPORT", "Connection failed", detail) from error
 
 
+def _check_language_drift(reply: str, messages: list[dict[str, str]], client: RuntimeConfig) -> None:
+    """Warn if the model drifted to a non-English language (CJK detection)."""
+    sample = reply[:80]
+    cjk_count = sum(1 for ch in sample if '\u4e00' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u30ff')
+    if cjk_count >= 3:
+        sys_content = messages[0].get("content", "") if messages else ""
+        sys_tokens = max(1, len(sys_content) // 4)
+        budget = max(256, client.num_ctx - client.num_predict)
+        print(f"\n⚠ LANGUAGE DRIFT: Response may not be in English.")
+        print(f"  System prompt: ~{sys_tokens} tokens | Budget: {budget} tokens")
+        print(f"  Tip: check .env (OLLAMA_NUM_PREDICT, OLLAMA_NUM_CTX) and J-system.txt")
+
+
 def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
     """Stream reply with pre-flight budget gate and Five Masters gate."""
 
@@ -257,7 +270,9 @@ def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
                 content = maybe_evaluate(content)
                 emit(content)
                 reply_chunks.append(content)
-        return "".join(reply_chunks)
+        result = "".join(reply_chunks)
+        _check_language_drift(result, messages, client)
+        return result
 
     # Ollama fallback
     with _ollama_chat(client, messages) as response:
@@ -272,6 +287,7 @@ def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
                 full_reply += content
             if chunk.get("done"):
                 break
+        _check_language_drift(full_reply, messages, client)
         return full_reply
 
 

@@ -99,6 +99,13 @@ def create_client() -> RuntimeConfig:
         if token.strip()
     )
 
+    # ── Safety clamp: prevent num_predict from starving context budget ──
+    # On small context windows (≤2048), reserving 1024 for generation
+    # leaves only 1024 for the conversation — not enough.  Clamp to 25%
+    # of context so at least 75% is available for system + history.
+    if num_ctx <= 2048 and num_predict > num_ctx // 4:
+        num_predict = num_ctx // 4
+
     model_path = _resolve_path(
         os.getenv("LLAMA_MODEL_PATH", ""),
         Path("models") / "qwen2.5-coder-14b-instruct-q4_k_m.gguf",

@@ -216,6 +216,13 @@ def reconstruct_context(
 
     mem_block = "\n\n".join(sections)
 
+    # ── Cap memory injection to 30% of context budget ──────────────
+    # On small context windows the system prompt must stay intact.
+    # If memory is too large, trim entries until it fits.
+    mem_cap = int(max_tokens * 0.30 * CHARS_PER_TOKEN)
+    if len(mem_block) > mem_cap:
+        mem_block = mem_block[:mem_cap] + "\n[...memory trimmed to fit budget...]"
+
     # Merge memory INTO the first system message so trim_context never
     # drops J's identity.  System messages are always preserved.
     injected = list(messages)
