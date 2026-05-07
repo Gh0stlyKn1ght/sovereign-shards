@@ -1,9 +1,24 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 
-.\model-server\llama-server.exe ^
-  --model "models\J.gguf" ^
-  --ctx-size 2048 ^
-  --temperature 0.7 ^
-  --top-p 0.9 ^
-  --repeat-penalty 1.1
+echo ══════════════════════════════════════════
+echo   SOVEREIGN SHARD — Booting J
+echo ══════════════════════════════════════════
+
+:: Use the shard-local Python, never the host
+set "SHARD_PYTHON=%~dp0python\python.exe"
+
+if not exist "%SHARD_PYTHON%" (
+    echo [ERROR] Shard Python not found at: %SHARD_PYTHON%
+    echo         Expected: python\python.exe relative to shard root
+    pause
+    exit /b 1
+)
+
+echo Python: %SHARD_PYTHON%
+echo.
+
+"%SHARD_PYTHON%" "%~dp0run.py" %*
+
+pause
