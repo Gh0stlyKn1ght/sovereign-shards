@@ -77,16 +77,22 @@ def _system_role(client: RuntimeConfig) -> str:
 
 
 def _build_tool_instructions(registry: ToolRegistry) -> str:
+    """Full tool listing — only injected on-demand (e.g. /tools command)."""
     return BASE_TOOL_INSTRUCTIONS + "\n" + registry.describe()
 
 
-def build_history(client: RuntimeConfig, registry: ToolRegistry, system_context: str = ""):
+def build_history(client: RuntimeConfig, registry: ToolRegistry | None = None, system_context: str = ""):
+    """Build initial message history with a lean system prompt.
+
+    Tool names are already baked into J-system.txt.  Full tool descriptions
+    are intentionally omitted to stay within the 2048-token context budget.
+    The router handles deterministic tool calls; the model only needs the
+    ACTION format + tool names to dispatch anything the router misses.
+    """
     return [
         {
             "role": _system_role(client),
-            "content": SYSTEM_PROMPT + _build_tool_instructions(registry) + (
-                f"\n\n[Context]\n{system_context}" if system_context else ""
-            ),
+            "content": SYSTEM_PROMPT,
         }
     ]
 
@@ -572,7 +578,7 @@ def run_chat(
     logger = SessionLogger(model=f"{client.backend}:{client.model}")
     rlog = RuntimeJsonLogger(session_id=logger.session_id)
     registry = ToolRegistry(BASE_DIR)
-    messages = build_history(client, registry, _format_hardware_context())
+    messages = build_history(client)
     local_server = LocalLlamaServer(client)
 
     try:
@@ -661,7 +667,7 @@ def run_chat(
                     os.environ["LLAMA_MODEL_ALIAS"] = new_model
                     os.environ["OLLAMA_MODEL"] = new_model
                     client = create_client()
-                    messages = build_history(client, registry, _format_hardware_context())
+                    messages = build_history(client)
                     print(f"[MODEL] Switched to: {new_model}")
                     print(f"  Backend: {client.backend}")
                     print(f"  Context: {client.num_ctx} tokens")
