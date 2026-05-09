@@ -28,6 +28,9 @@ from app.agent.executor import (
     execute_tool_call,
     format_tool_result,
     needs_confirmation,
+    MAX_ACTION_RETRIES,
+    ACTION_RETRY_PROMPT,
+    validate_action_payload,
 )
 from app.agent.graph import ready_steps, format_graph, topo_tiers
 from app.agent.parallel import StepOutcome, run_tier_parallel, safe_print
@@ -46,7 +49,6 @@ from app.file_tools import list_dir, read_file, write_file
 from app.local_server import LocalLlamaServer
 from app.runtime_log import RuntimeJsonLogger
 from app.session import SessionLogger
-from app.system_tools import get_system_snapshot
 from app.router import route as fast_route
 from core.fivemasters import evaluate_code
 
@@ -57,12 +59,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = BASE_DIR / "prompts"
 
 SYSTEM_PROMPT = (PROMPTS_DIR / "J-system.txt").read_text(encoding="utf-8")
-
-BASE_TOOL_INSTRUCTIONS = (
-    "\n\n[Available Tools]\n"
-    "You have the following tools. Use them whenever a task involves files, "
-    "code, git, or the system. Do NOT tell the user to do it themselves.\n"
-)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -76,12 +72,8 @@ def _system_role(client: RuntimeConfig) -> str:
     return "system"
 
 
-def _build_tool_instructions(registry: ToolRegistry) -> str:
-    """Full tool listing — only injected on-demand (e.g. /tools command)."""
-    return BASE_TOOL_INSTRUCTIONS + "\n" + registry.describe()
 
-
-def build_history(client: RuntimeConfig, registry: ToolRegistry | None = None, system_context: str = ""):
+def build_history(client: RuntimeConfig):
     return [
         {
             "role": _system_role(client),
@@ -324,10 +316,27 @@ def _run_turn(
 
     # Bounded tool loop with circuit breaker
     breaker = CircuitBreaker()
+    action_retries = 0
+    last_tool_error: str | None = None
     for hop in range(MAX_TOOL_HOPS):
         action = _extract_action(reply)
         if action is None:
+            if action_retries < MAX_ACTION_RETRIES:
+                messages.append({"role": "user", "content": ACTION_RETRY_PROMPT})
+                logger.append("user", ACTION_RETRY_PROMPT)
+                action_retries += 1
+                reply = _stream_reply(client, messages)
+                print()
+                messages.append({"role": assistant_role, "content": reply})
+                logger.append("assistant", reply)
+                continue
             break
+
+        validation_error = validate_action_payload(action, registry)
+        if validation_error is not None:
+            messages.append({"role": "user", "content": validation_error})
+            logger.append("system", validation_error)
+            continue
 
         tool_name = action.get("tool", "")
         tool_args = str(action.get("args", []))
@@ -367,6 +376,7 @@ def _run_turn(
         rlog.event("tool_call", tool=tool_name, hop=hop)
         tool_result = _execute_tool(action, registry)
         is_error = tool_result.startswith("[TOOL ERROR]")
+        last_tool_error = tool_result if is_error else None
         breaker.record_turn(tool=tool_name, args=tool_args, output=tool_result, is_error=is_error)
         time.sleep(PROCESS_PAUSE_SECONDS)
 
@@ -379,6 +389,7 @@ def _run_turn(
         print(f"\n{tool_response}\n")
         messages.append({"role": assistant_role, "content": tool_response})
         logger.append("assistant", tool_response)
+        action_retries = 0
 
         continuation = (
             "Continue your answer using the tool result above. "
