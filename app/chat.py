@@ -440,13 +440,18 @@ def _run_turn(
 
         # ── Post-generation trim: strip runaway tool calls ─────────
         # If budget is spent and J still generates an ACTION:, or if
-        # J answered and then tacked on a second ACTION:, trim it.
-        if remaining <= 0 and "ACTION:" in reply:
-            answer_part = reply.split("ACTION:", 1)[0].rstrip()
-            if len(answer_part) > 20:
-                reply = answer_part
-            else:
-                reply = "[STOPPED] Tool budget exhausted."
+        # J answered and then tacked on a second ACTION:, trim it
+        # and BREAK — do not let the retry logic re-prompt.
+        if remaining <= 0:
+            if "ACTION:" in reply:
+                answer_part = reply.split("ACTION:", 1)[0].rstrip()
+                if len(answer_part) > 20:
+                    reply = answer_part
+                else:
+                    reply = "[STOPPED] Tool budget exhausted."
+            messages.append({"role": assistant_role, "content": reply})
+            logger.append("assistant", reply)
+            break  # budget spent — exit the tool loop
 
         messages.append({"role": assistant_role, "content": reply})
         logger.append("assistant", reply)
