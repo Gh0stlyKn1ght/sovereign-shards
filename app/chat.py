@@ -308,6 +308,7 @@ def _run_turn(
     user_message: str,
     registry: ToolRegistry,
     autonomy_mode: str = "semi",
+    tool_budget: int = MAX_TOOL_BUDGET,
 ) -> str:
 
     rlog.event("stage_start", stage="input")
@@ -411,22 +412,22 @@ def _run_turn(
 
         # ── Tool budget tracking ────────────────────────────────────
         successful_hops = sum(1 for m in messages if m.get("content", "").startswith("[TOOL EXECUTION]") and "[TOOL ERROR]" not in m.get("content", ""))
-        remaining = MAX_TOOL_BUDGET - successful_hops
+        remaining = tool_budget - successful_hops
 
         if remaining <= 0:
             # Budget spent — force answer, no more tools
             continuation = (
-                f"[ACTION COMPLETE — {MAX_TOOL_BUDGET}/{MAX_TOOL_BUDGET} tool calls used] "
+                f"[ACTION COMPLETE — {tool_budget}/{tool_budget} tool calls used] "
                 "Respond to the user now. Do not call another tool."
             )
         elif remaining == 1:
             continuation = (
-                f"[{successful_hops}/{MAX_TOOL_BUDGET} tool calls used, 1 remaining] "
+                f"[{successful_hops}/{tool_budget} tool calls used, 1 remaining] "
                 "Continue. You may call one more tool if needed, then respond."
             )
         else:
             continuation = (
-                f"[{successful_hops}/{MAX_TOOL_BUDGET} tool calls used, {remaining} remaining] "
+                f"[{successful_hops}/{tool_budget} tool calls used, {remaining} remaining] "
                 "Continue. Call another tool if needed, or respond to the user."
             )
 
@@ -952,9 +953,11 @@ def run_chat(
                 continue
 
             try:
-                print("\nJ.: ", end="", flush=True)
+                budget = route_result.tool_budget
+                print(f"\nJ.: ", end="", flush=True)
                 _run_turn(
-                    client, messages, logger, rlog, user_message, registry, autonomy_mode
+                    client, messages, logger, rlog, user_message, registry, autonomy_mode,
+                    tool_budget=budget,
                 )
                 # Weight-triggered reflection
                 if should_reflect():
