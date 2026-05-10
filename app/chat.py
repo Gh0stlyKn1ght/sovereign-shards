@@ -8,6 +8,7 @@ context trimming, autonomy modes, and the full dev-tool suite.
 from __future__ import annotations
 
 import ast
+import os
 import re
 import time
 from json import JSONDecodeError, dumps, loads
