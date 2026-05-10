@@ -46,6 +46,10 @@ def main() -> None:
         return
 
     pattern = sys.argv[1]
+    # Strip surrounding quotes — 7B models often wrap patterns in literal
+    # quotes: '"circuit_breaker"' instead of 'circuit_breaker'.
+    if len(pattern) >= 2 and pattern[0] == pattern[-1] and pattern[0] in ('"', "'"):
+        pattern = pattern[1:-1]
     search_path = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "."
     ext_filter = None
     if "--ext" in sys.argv:
