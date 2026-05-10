@@ -95,7 +95,7 @@ def create_client() -> RuntimeConfig:
         token.strip()
         for token in os.getenv(
             "LLAMA_STOP_TOKENS",
-            "<|im_end|>,<|im_start|>,\\nYou:,\\nUnderstood,\\nI apologize,\\nAs per my programming,\\nI am not capable",
+            "<|im_end|>,<|im_start|>,\\nYou:,\\nUnderstood,\\nI apologize,\\nAs per my programming,\\nI am not capable,\\n[TOOL,\\nresult:",
         ).split(",")
         if token.strip()
     )
