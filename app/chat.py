@@ -159,6 +159,7 @@ def _ollama_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
             "num_ctx": client.num_ctx,
             "num_thread": client.num_thread,
             "temperature": client.temperature,
+            "repeat_penalty": client.repeat_penalty,
         },
     }
 
@@ -192,6 +193,8 @@ def _llama_cpp_chat(client: RuntimeConfig, messages: list[dict[str, str]]):
         "temperature": client.temperature,
         "top_p": client.top_p,
         "stop": list(client.stop_tokens),
+        "repeat_penalty": client.repeat_penalty,
+        "frequency_penalty": client.repeat_penalty - 1.0,
     }
 
     request = Request(
