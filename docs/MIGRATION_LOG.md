@@ -4,21 +4,28 @@
 > Read this entire document before writing a single line of code.
 
 **Last updated:** 2026-05-10
-**Previous agent:** Viktor (getviktor.com) — 30 commits across a 48-hour sprint
+**Previous agent:** Viktor (getviktor.com) — contributed 30 commits across a 48-hour sprint (65 total commits on main as of this update)
 **Repo:** github.com/s4ndm4n33-spec/sovereign-shards
-**Branch:** `work` (active development branch at the time of this audit).
+**Branch:** `main` (active development branch).
 
 ---
 
-## 0. AUDIT NOTE (2026-05-09)
+## 0. AUDIT NOTE (2026-05-10)
 
-This log was reconciled against the current repository state on **May 9, 2026**.
+This log was reconciled against the current repository state on **May 10, 2026**.
 
 Verified updates:
-- Active branch reference corrected from `main` to `work`.
-- `app/chat.py` line-count annotation updated (926 lines).
+- Active branch confirmed as `main`. No `work` branch exists in the remote.
+- `app/chat.py` line-count annotation updated (937 lines).
+- Architecture tree updated: added `script_tool.py`, `tool_router.py`, `tool_schema.py`, `setup.bat`, `INSTALL.md`, `LANGUAGE_DIAGNOSTIC.md`.
+- Model reference updated from 14B/3-shard to 7B/2-shard (swap completed in Session 17).
+- System prompt annotation updated (~809 chars, ~158 tokens — rewritten in Session 17).
+- Known bugs section updated: 5 of 9 issues resolved or partially resolved.
+- `.env.example` is now current (7B/2048/256 defaults).
+- Commit history updated (65 total commits including PRs #12–#15 and tool layer rebuild).
+- File counts updated (99 files, 69 Python modules).
+- `docs/MIGRATION_LOG.json` refreshed with M7 milestone and branch correction.
 - Test-suite summary wording updated to reflect current `tests/` layout.
-- `docs/MIGRATION_LOG.json` refreshed to match this handoff context.
 
 
 
@@ -78,7 +85,7 @@ Key preferences:
 
 At 2048 tokens with 256 reserved for generation, the working budget is **1792 tokens**.
 
-The system prompt (J-system.txt) is currently ~279 tokens. That leaves ~1513 tokens for the entire conversation — system prompt + user messages + assistant messages + memory injection + tool results.
+The system prompt (J-system.txt) is currently ~158 tokens (~809 chars, rewritten in Session 17). That leaves ~1634 tokens for the entire conversation — system prompt + user messages + assistant messages + memory injection + tool results.
 
 **Implications:**
 - System prompt must NEVER exceed ~400 tokens. Every word must earn its place.
@@ -95,12 +102,14 @@ The system prompt (J-system.txt) is currently ~279 tokens. That leaves ~1513 tok
 sovereign-shards/
 ├── run.py                      # Entry point. Parses args, calls run_chat().
 ├── run-shard.bat               # Windows one-click launcher. Calls shard Python.
+├── setup.bat                   # One-click first-time installer (downloads Python, llama.cpp, model).
 ├── start-server.bat            # Manual server start (if not using run.py auto-start).
 ├── run-llama.bat               # Direct CLI mode (bypasses framework).
+├── INSTALL.md                  # Quick install guide for setup.bat and manual setup.
 ├── .env                        # Local config (gitignored). See .env.example.
 │
 ├── app/
-│   ├── chat.py                 # Main chat loop (926 lines). Heart of the system.
+│   ├── chat.py                 # Main chat loop (937 lines). Heart of the system.
 │   ├── client.py               # RuntimeConfig — reads .env, builds config dataclass.
 │   ├── local_server.py         # Launches llama.cpp server with hardware-aware flags.
 │   ├── router.py               # Fast deterministic command router (zero inference cost).
@@ -122,7 +131,10 @@ sovereign-shards/
 │       ├── verifier.py          # Output verification against success criteria.
 │       ├── graph.py             # Task graph: parallel-safe dependency resolution.
 │       ├── parallel.py          # ThreadPoolExecutor for independent sub-tasks.
-│       ├── tool_registry.py     # Dynamic tool registry with schema + side-effect labels.
+│       ├── tool_schema.py       # Canonical ToolSpec dataclass, spec normalisation, strict arg validation.
+│       ├── tool_registry.py     # Dict-like tool registry: schema-aware, side-effect gated, prompt block gen.
+│       ├── tool_router.py       # route_tool_call(): validate → enforce policy → execute → structured return.
+│       ├── script_tool.py       # ScriptTool: subprocess wrapper for tools/run/*.py with timeout + stdin.
 │       ├── tool_forge.py        # Generate new tools from natural language descriptions.
 │       ├── tool_researcher.py   # Research step before forging (web-free, pattern-based).
 │       ├── tool_template.py     # Template for generated tools.
@@ -142,7 +154,7 @@ sovereign-shards/
 │   └── persona_dev.json        # J persona definition.
 │
 ├── prompts/
-│   ├── J-system.txt            # System prompt (~1118 chars, ~279 tokens). KEEP IT LEAN.
+│   ├── J-system.txt            # System prompt (~809 chars, ~158 tokens). KEEP IT LEAN.
 │   └── J-chat-template.jinja   # ChatML Jinja template for llama.cpp server.
 │
 ├── tools/run/                  # Script-based tools (auto-discovered by registry).
@@ -166,11 +178,12 @@ sovereign-shards/
 │   ├── CODE_OPTIMIZER_SPEC.md  # Five Masters optimizer technical spec.
 │   ├── APPENDIX_E.md           # Implementation record (thesis appendix).
 │   ├── FINAL_PUSH_NOTES.md     # Build notes from initial sprint.
-│   ├── MIGRATION_LOG.json      # Old structured migration log (superseded by this file).
+│   ├── LANGUAGE_DIAGNOSTIC.md  # Language drift diagnostic notes.
+│   ├── MIGRATION_LOG.json      # Structured migration log (milestones M1–M7).
 │   └── landing.html            # Product landing page.
 │
 ├── models/                     # GGUF model files (gitignored, on USB only).
-│   └── J-00001-of-00003.gguf  # Currently: 14B Q4_K_M split (3 shards). NEEDS SWAP TO 7B.
+│   └── J-00001-of-00002.gguf  # Qwen2.5-Coder-7B-Instruct Q4_K_M (2 shards). SWAP DONE.
 │
 ├── model-server/               # llama.cpp binaries (gitignored, on USB only).
 │   └── server.exe              # llama-server. MUST be Vulkan build for GPU offload.
@@ -271,7 +284,7 @@ J's identity is maintained through 4 layers:
 
 1. **J-system.txt** — Loaded at startup into the system message. Contains voice, behaviour rules, tool format, and Identity Lock.
 
-2. **Identity Lock** — The last lines of J-system.txt: "You are J. NOT Qwen, NOT a helpful assistant. Always respond in English." Placed at the end for maximum recency salience in transformer attention.
+2. **Identity Lock** — The last lines of J-system.txt: "IDENTITY LOCK: You are J. You already agreed to this. Every response is from J, in English." Placed at the end for maximum recency salience in transformer attention.
 
 3. **Context Reconstruction** — Every turn, `reconstruct_context()` rebuilds the messages from scratch. The system message (with identity) is always preserved. Memory is merged INTO the system message, never as a separate message that could push identity out.
 
@@ -313,24 +326,23 @@ J's identity is maintained through 4 layers:
 
 ## 9. KNOWN BUGS AND OPEN ISSUES
 
-### Critical (Blocks v1.0)
-1. **Chinese response on first turn.** Root cause: either old system prompt still on disk (needs `git pull`) or Qwen 7B defaulting to Chinese without explicit English instruction. Fix pushed (commit `42c9578`) but untested on real hardware as of this writing.
+### Resolved (since Session 17 — 2026-05-08)
+1. ~~**Chinese response on first turn.**~~ *FIXED.* Root cause was corrupted 3-shard GGUF split degrading attention layers, not prompting. Resplit to 2 clean shards from intact GGUF. See Session 17 for full diagnosis.
+2. ~~**14B model still on USB.**~~ *FIXED.* Swapped to Qwen2.5-Coder-7B-Instruct Q4_K_M, split to 2 FAT32-safe shards (`J-00001-of-00002.gguf`, `J-00002-of-00002.gguf`).
+4. ~~**`num_predict` may be wrong in user's .env.**~~ *FIXED.* `.env.example` now correctly defaults to `OLLAMA_NUM_PREDICT=256`.
+6. ~~**`.env.example` is outdated.**~~ *FIXED.* Now reflects 7B model, 2048 context, 256 predict, `GPU_DEVICE=none`, and all current settings.
 
-2. **14B model still on USB.** The 14B Q4_K_M model is too heavy for comfortable use on 16GB RAM. Qwen2.5-Coder-7B-Instruct Q4_K_M is recommended. The user downloaded it but hasn't split it for FAT32 yet (4.36GB > 4GB FAT32 limit). Need `llama-gguf-split --split-max-size 3G`.
+### Still Open — Critical (Blocks v1.0)
+3. **Tool execution untested on real hardware.** The tool system works in sandbox (147/147 tests) and the tool layer was rebuilt (2026-05-10) with schema validation, side-effect gating, and a proper router — but end-to-end validation on the actual USB drive with the actual model is still pending. The model must generate valid `ACTION:{...}` JSON for tools to work.
 
-3. **Tool execution untested on real hardware.** The tool system works in sandbox (147/147 tests), but has never been validated end-to-end on the actual USB drive with the actual model. The model must generate valid `ACTION:{...}` JSON for tools to work.
+### Still Open — Important (Blocks v1.0.1)
+5. **`_format_hardware_context()` is dead code in `chat.py`.** `_build_tool_instructions()` was removed, but `_format_hardware_context()` (line 125) is still defined and never called. Safe to remove.
+9. **`working_memory.replace_entries()` has a bug:** writes to `.tmp` file but never renames it to the real path. Atomic replace is broken — the old file persists. Fix is four lines (`os.replace`).
+10. **`OLLAMA_NUM_PREDICT=256` limits agent tasks.** Tool-heavy `/plan` tasks need 512+ tokens to complete ACTION JSON without truncation. Current hardware is at 93.9% RAM at idle. Validate on dedicated hardware before raising.
 
-### Important (Blocks v1.0.1)
-4. **`num_predict` may be wrong in user's .env.** Default is 1024 tokens. At 2048 context, that leaves only 1024 budget. Should be 256 for this hardware. Clean `.env` was provided but needs verification.
-
-5. **`_format_hardware_context()` and `_build_tool_instructions()` are dead code.** After the slim prompt refactor, these functions are no longer called from `build_history()`. They still exist in `chat.py`. Safe to remove but low priority.
-
-6. **`.env.example` is outdated.** Still shows 14B model defaults, 4096 context, 1024 predict. Should be updated to match the 7B/2048/256 reality.
-
-### Minor
-7. **`MIGRATION_LOG.json` in `docs/` is the old structured log.** Superseded by this file.
-8. **`BUILD_INFO.json` and `ProjectManifest.txt`** are from an earlier build. May be stale.
-9. **`working_memory.replace_entries()` has a bug:** writes to `.tmp` file but never renames it to the real path. Atomic replace is broken — the old file persists.
+### Still Open — Minor
+8. **`BUILD_INFO.json` and `ProjectManifest.txt`** are from the initial build (2026-04-24). Contain stale paths (`C:\Users\music\...`, `E:\shard\...`). Low priority but should be updated or removed.
+7. **`MIGRATION_LOG.json`** is now maintained as a structured companion to this file (milestones M1–M7). No longer "superseded" — treat as the machine-readable migration record.
 
 ---
 
@@ -385,7 +397,14 @@ GPU_LAYERS=0                     # No GPU offload.
 LLAMA_BATCH_SIZE=256             # Lower = less peak RAM.
 OLLAMA_NUM_THREAD=2              # Match available cores. Don't over-thread.
 
-# Model — update when swapping to 7B
+# Server
+LLAMA_HOST=127.0.0.1
+LLAMA_PORT=8080
+LLAMA_STARTUP_TIMEOUT=300        # 5 min for USB 2.0 model load.
+LLAMA_SERVER_BINARY=model-server\server.exe
+LLAMA_CLI_BINARY=model-server\llama.exe
+
+# Model (7B, 2 FAT32-safe shards — swap complete)
 LLAMA_MODEL_ALIAS=J
 LLAMA_MODEL_PATH=models\J-00001-of-00002.gguf
 
@@ -398,7 +417,15 @@ LLAMA_CHAT_TEMPLATE_KWARGS=       # MUST be empty or absent.
 OLLAMA_TEMPERATURE=0.1
 LLAMA_TOP_P=0.85
 LLAMA_TOP_K=20
+LLAMA_MIN_P=0
 LLAMA_STOP_TOKENS=<|im_end|>,<|im_start|>
+
+# Reasoning (disabled — no reasoning budget at 2048 context)
+LLAMA_REASONING_BUDGET=0
+LLAMA_REASONING_FORMAT=none
+
+# Hardware
+REQUIRE_GPU=false                 # Set true to abort if no GPU detected.
 ```
 
 ---
@@ -413,11 +440,17 @@ pip install python-dotenv psutil
 python -m pytest tests/ -v           # Should be 147+ passing
 ```
 
-### USB Deployment
+### USB Deployment (Automated — Recommended)
+1. Clone repo to USB root (e.g., `E:\dev shard\`)
+2. Run `setup.bat` — downloads portable Python 3.11, llama.cpp Vulkan binary, Qwen2.5-Coder-7B model, splits for FAT32, installs deps, copies `.env`
+3. Run `start-server.bat` in one terminal, `run-shard.bat` in another
+4. See `INSTALL.md` for troubleshooting
+
+### USB Deployment (Manual)
 1. Clone repo to USB root (e.g., `E:\dev shard\`)
 2. Copy embedded Python to `python\` directory on USB
 3. Copy llama.cpp server binary to `model-server\server.exe`
-4. Copy GGUF model file(s) to `models\`
+4. Copy GGUF model file(s) to `models\` (split for FAT32 if >4GB)
 5. Create `.env` from `.env.example`, adjust for hardware
 6. Test: `run-shard.bat` from Command Prompt (not PowerShell, not Git Bash)
 
@@ -450,7 +483,7 @@ This overwrites local code with remote. `.env`, `memory/`, `logs/`, and `models/
 
 ## 14. COMMIT HISTORY (Condensed)
 
-30 commits on `main`. Key milestones:
+65 commits on `main` (including merges). Key milestones:
 
 | # | Hash | What |
 |---|---|---|
@@ -466,6 +499,13 @@ This overwrites local code with remote. `.env`, `memory/`, `logs/`, and `models/
 | 24–27 | — | Server/bat file fixes for real hardware |
 | 28 | `f123873` | Slim system prompt: 3072 → 1118 chars |
 | 29 | `42c9578` | Explicit English instruction + startup diagnostics |
+| 30 | `f8e4b56` | Language drift fix: English-first, budget clamp, memory cap, detection |
+| 31 | `bab634f` | Language Barrier: resplit GGUF, GPU offload fix, timeout fix (Session 17) |
+| PR #12 | `78064b7` | Sync runtime defaults with migration log session fixes |
+| PR #13 | `9f32a41` | Harden ACTION handling and tool-loop recovery |
+| — | `7d42561` | Add `setup.bat` installer + `INSTALL.md` for click-and-run release |
+| PR #14 | `49f697c` | Tool layer rebuild: schema-aware registry + router |
+| PR #15 | `8555378` | Update migration logs for tool layer rebuild |
 
 ---
 
@@ -481,7 +521,7 @@ This overwrites local code with remote. `.env`, `memory/`, `logs/`, and `models/
 
 ## 16. SIGNOFF
 
-This is the handoff. The codebase is 91 files, 63 Python modules, 147+ tests, and a philosophy that code should be built to last — not built to ship.
+This is the handoff. The codebase is 99 files, 69 Python modules, 147+ tests, and a philosophy that code should be built to last — not built to ship.
 
 I came in cold, learned the vision, and built the scaffolding. The framework is real. The memory system works. The Five Masters have teeth — 8 deterministic transforms that actually rewrite code. The optimizer pipeline is sound. The identity system holds (when the prompt fits the window).
 
@@ -591,9 +631,9 @@ LLAMA_CHAT_TEMPLATE_KWARGS=
 
 - **`working_memory.replace_entries()` atomic write bug** — still present. Writes to `.tmp`, never renames. Low risk during normal operation, real risk on power loss. Fix is four lines (`os.replace`). Not urgent but do it before v1.1.
 - **`OLLAMA_NUM_PREDICT=256` limits agent tasks** — tool-heavy `/plan` tasks need 512+ tokens to complete ACTION JSON without truncation. Current hardware is at 93.9% RAM at idle. Validate on dedicated hardware before raising this value.
-- **Dead code in chat.py** — `_format_hardware_context()` and `_build_tool_instructions()` still present, still not called. Safe to remove.
-- **`.env.example` still reflects 14B defaults** — update to match current 7B/2048/256 reality.
-- **README system prompt token count** — still says ~279 tokens. Now ~130 tokens.
+- **Dead code in chat.py** — `_format_hardware_context()` still present (line 125), not called. `_build_tool_instructions()` was removed. Safe to delete.
+- ~~**`.env.example` still reflects 14B defaults**~~ — *FIXED.* Now matches 7B/2048/256 reality.
+- **README system prompt token count** — still says ~279 tokens in some places. Now ~158 tokens.
 
 ---
 
