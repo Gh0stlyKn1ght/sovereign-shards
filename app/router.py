@@ -25,7 +25,6 @@ class RouteResult:
     tool_args: list = None   # args passed
     output: str = ""         # tool output (if handled)
     tool_budget: int = 1     # max tool calls the LLM gets this turn
-    mode_hint: str = ""      # "plan" → inject plan-mode prompt prefix
 
     def __post_init__(self):
         if self.tool_args is None:
@@ -65,6 +64,10 @@ def route(user_input: str, registry: "ToolRegistry") -> RouteResult:
     if the input needs the LLM."""
 
     stripped = user_input.strip()
+    # Strip surrounding quotes — user often wraps input in "..." or '...'
+    # which silently breaks every regex pattern in this router.
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
+        stripped = stripped[1:-1].strip()
     lowered = stripped.lower()
 
     # ── 1. Slash commands are handled elsewhere (return unhandled) ──
@@ -117,8 +120,7 @@ def route(user_input: str, registry: "ToolRegistry") -> RouteResult:
 
     # ── 7. No match → classify complexity and set tool budget ───────
     budget = _classify_budget(stripped, lowered)
-    mode = _classify_mode(stripped, lowered)
-    return RouteResult(handled=False, tool_budget=budget, mode_hint=mode)
+    return RouteResult(handled=False, tool_budget=budget)
 
 
 # ── Budget classifier ───────────────────────────────────────────────
@@ -138,55 +140,32 @@ _SINGLE_KEYWORDS = (
 
 
 def _classify_budget(text: str, lowered: str) -> int:
-    """Estimate how many tool calls this prompt needs. Zero inference cost."""
+    """Estimate how many tool calls this prompt needs. Zero inference cost.
+
+    Returns 0 for pure chat (identity, math, general knowledge) so the
+    tool loop accepts J's answer without forcing a tool call.
+    """
 
     # Agent mode gets full budget
     if lowered.startswith("/plan"):
         return 5
 
-    # Count multi-step signals
-    multi_signals = sum(1 for kw in _MULTI_STEP_KEYWORDS if kw in lowered)
-
     # Count distinct tool-like verbs (read + search = 2 tools)
     tool_verbs = sum(1 for v in ("read", "search", "write", "run", "bash", "list", "tree")
                      if v in lowered)
+
+    # No tool verbs → pure chat/knowledge question → budget 0
+    if tool_verbs == 0:
+        return 0
+
+    # Count multi-step signals
+    multi_signals = sum(1 for kw in _MULTI_STEP_KEYWORDS if kw in lowered)
 
     if multi_signals >= 2 or tool_verbs >= 3:
         return 3  # complex multi-step
     if multi_signals >= 1 or tool_verbs >= 2:
         return 2  # moderate
-    return 1      # simple single-tool or conversational
-
-
-def _classify_mode(text: str, lowered: str) -> str:
-    """Detect if the prompt benefits from plan-before-act mode.
-
-    Returns "plan" when the request has 2+ distinct steps or explicit
-    planning language.  Returns "" for simple/single-step requests.
-    Zero inference cost — pure keyword matching.
-    """
-    # Explicit planning language
-    _PLAN_SIGNALS = (
-        "step by step", "break it down", "walk me through",
-        "plan", "first.*then", "compare.*and",
-    )
-    for signal in _PLAN_SIGNALS:
-        if re.search(signal, lowered):
-            return "plan"
-
-    # Multi-verb detection: "read X and write Y", "search then fix"
-    action_verbs = sum(1 for v in (
-        "read", "search", "write", "create", "update", "fix",
-        "delete", "move", "rename", "compare", "run", "test",
-    ) if v in lowered)
-
-    connectors = sum(1 for c in ("then", "and then", "after that", "next", "also", "and")
-                     if c in lowered)
-
-    if action_verbs >= 2 and connectors >= 1:
-        return "plan"
-
-    return ""
+    return 1      # simple single-tool
 
 
 # ── Internal helpers ────────────────────────────────────────────────
