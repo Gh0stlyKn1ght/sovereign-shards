@@ -182,7 +182,7 @@
     {
       "id": "M9",
       "title": "Endurance testing and router maturation",
-      "summary": "Three rounds of 20-turn endurance testing. Router expanded to handle Windows shell commands and all registered tools (not just run_*). Budget=0 answer acceptance dropped length check. Router breadcrumbs injected into J context for recall. System prompt enhanced with project facts, identity anchor, and anti-Chinese directive. Score progression: v1 5/20 → v2 12/20 → speed-run retests 5/5 pass.",
+      "summary": "Three rounds of 20-turn endurance testing drove router maturation. v1 (5/20 FAIL) → v2 (12/20 CONDITIONAL) → v3 (17.5/20 PASS). Phase 1 gate cleared. Router expanded: Windows shell commands, all registered tools (not just run_*), budget=0 answer acceptance, router breadcrumbs for J context recall, stdin-tools single-arg bypass, backslash→forward slash normalisation. System prompt enhanced with project facts, identity anchor, anti-Chinese directive.",
       "files": [
         "app/router.py",
         "app/chat.py",
@@ -197,9 +197,11 @@
         "Inject one-line router breadcrumbs into J message history",
         "Add PROJECT FACTS block to J-system.txt (Python, Windows, Five Masters = AST governance)",
         "Strengthen identity: Say I am J when asked, you are NOT Qwen",
-        "Add anti-Chinese directive to system prompt"
+        "Add anti-Chinese directive to system prompt",
+        "Fix run_bash/run_exec arg splitting: pass entire rest as single stdin arg",
+        "Normalise backslashes to forward slashes in _split_args for Windows paths"
       ],
-      "status": "complete",
+      "status": "complete — Phase 1 gate CLEARED",
       "session": 19,
       "depends_on": [
         "M8"
