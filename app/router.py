@@ -85,7 +85,13 @@ def route(user_input: str, registry: "ToolRegistry") -> RouteResult:
     first_word = stripped.split()[0] if stripped.split() else ""
     if first_word in registry.tools:
         rest = stripped[len(first_word):].strip()
-        args = _split_args(rest) if rest else []
+        # Tools whose first arg is piped to stdin need the WHOLE rest
+        # string as one arg — don't shlex-split shell commands.
+        _STDIN_TOOLS = ("run_bash", "run_exec")
+        if first_word in _STDIN_TOOLS:
+            args = [rest] if rest else []
+        else:
+            args = _split_args(rest) if rest else []
         # Default path for list_dir when no args given
         if first_word == "list_dir" and not args:
             args = ["."]
@@ -193,11 +199,21 @@ def _dispatch_bash(command: str, registry: "ToolRegistry") -> RouteResult:
 
 
 def _split_args(text: str) -> list[str]:
-    """Shell-aware argument splitting."""
+    """Shell-aware argument splitting.
+
+    Normalises Windows backslashes to forward slashes before splitting
+    so shlex doesn't eat them as escape sequences (e.g. prompts\\J-system.txt
+    → prompts/J-system.txt). Python's open() handles forward slashes on
+    Windows, so this is safe for all file-based tools.
+    """
+    # Replace backslashes with forward slashes to survive shlex posix mode.
+    # This is safe because tool args are file paths or content strings —
+    # neither needs literal backslashes.
+    normalized = text.replace("\\", "/")
     try:
-        return shlex.split(text)
+        return shlex.split(normalized)
     except ValueError:
-        return text.split()
+        return normalized.split()
 
 
 def _looks_like_command(text: str) -> bool:
