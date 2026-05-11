@@ -889,6 +889,8 @@ def run_chat(
         sys_tokens = max(1, len(sys_content) // 4)
         budget = max(256, client.num_ctx - client.num_predict)
 
+        ui.init()  # Black background, clear screen
+
         prompt_preview = ""
         if sys_content:
             prompt_preview = sys_content[:60].replace("\n", " ")
