@@ -345,17 +345,13 @@ def _run_turn(
             # - budget=0 (pure chat): accept any non-stub answer
             # - budget>=1 (tools expected): retry — J should use a tool
             stripped_reply = reply.strip()
-            # "Understood" is only a stub if the reply is short.
-            # Long replies starting with "Understood, ..." are real answers
-            # (e.g. "Understood, I will proceed under the identity of J...")
-            is_understood_stub = (
-                stripped_reply.lower().startswith("understood")
-                and len(stripped_reply) < 60
-            )
+            # Budget=0 means the router decided no tool is needed.
+            # Accept ANY non-empty answer — even short ones like "2048."
+            # Only reject pure stubs: empty, just "Understood", or ACTION leftovers.
             is_chat_answer = (
                 tool_budget == 0
-                and len(stripped_reply) > 20
-                and not is_understood_stub
+                and len(stripped_reply) > 0
+                and stripped_reply.lower() not in ("understood", "understood.")
                 and "ACTION:" not in stripped_reply
             )
             if is_chat_answer or action_retries >= MAX_ACTION_RETRIES:
@@ -973,6 +969,13 @@ def run_chat(
                 rlog.event("fast_route", tool=route_result.tool_name)
                 wm_entry = working_memory.compress_turn(user_message, route_result.output)
                 working_memory.append(**wm_entry)
+                # Inject a one-line breadcrumb into J's message history so
+                # it can recall router-handled turns when asked.
+                output_preview = route_result.output[:120].replace("\n", " ")
+                breadcrumb = f"[SYSTEM] {route_result.tool_name} {' '.join(route_result.tool_args)}: {output_preview}"
+                assistant_role = _assistant_role(client)
+                messages.append({"role": "user", "content": user_message})
+                messages.append({"role": assistant_role, "content": breadcrumb})
                 continue
 
             try:
