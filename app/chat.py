@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from app.agent import ToolRegistry, working_memory
+from app.agent import task_buffer
 from app.agent.context import (
     trim_context,
     reconstruct_context,
@@ -637,6 +638,170 @@ def _run_agent_task(
     return summary
 
 
+# ── Buffer-based plan/execute (7B-friendly) ─────────────────────────
+
+
+def _run_buffer_plan(
+    client: RuntimeConfig,
+    messages: list[dict[str, str]],
+    logger: SessionLogger,
+    rlog: RuntimeJsonLogger,
+    registry: ToolRegistry,
+    objective: str,
+    autonomy_mode: str = "semi",
+    skip_planning: bool = False,
+) -> str:
+    """Lightweight plan → execute flow using the file-based task buffer.
+
+    Designed for small context windows (≤2048 tokens):
+    1. PLAN phase: J outputs numbered steps (1 inference, plan_mode prefix)
+    2. Parse steps → write to task_buffer.jsonl (0 inference)
+    3. EXECUTE phase: for each step, inject ONLY the step goal → run 1-2 tools
+    4. SUMMARY phase: inject buffer summary → J summarizes (1 inference)
+
+    Key difference from _run_agent_task: each step gets a CLEAN context
+    (system prompt + step only), and plans live on disk not in context.
+    """
+    rlog.event("buffer_plan_start", objective=objective)
+
+    # ── Phase 1: PLAN — get J to output numbered steps ──────────
+    # Skip if steps were already loaded into the buffer (e.g. /steps command)
+    if skip_planning and task_buffer.pending_count() > 0:
+        print(f"\n[BUFFER] Executing pre-loaded plan...")
+        print(task_buffer.summary())
+    else:
+        plan_prefix = ""
+        try:
+            plan_prefix = (PROMPTS_DIR / "plan_mode.txt").read_text(encoding="utf-8").strip()
+        except OSError:
+            plan_prefix = ("PLAN MODE: Break the task into numbered steps BEFORE acting.\n"
+                           "Format:\n1. [step]\n2. [step]\n...\n"
+                           "Do NOT call any tools yet. Just output the plan.")
+
+        plan_prompt = f"{plan_prefix}\n\nObjective: {objective}"
+        messages.append({"role": "user", "content": plan_prompt})
+        messages[:] = trim_context(messages, max_tokens=client.num_ctx)
+
+        print("\n[PLAN MODE] Asking J to decompose the task...\n")
+        print("J.: ", end="", flush=True)
+        plan_raw = _stream_reply(client, messages)
+        print()
+        messages.append({"role": _assistant_role(client), "content": plan_raw})
+        logger.append("assistant", f"[PLAN]\n{plan_raw}")
+
+        # Parse steps → buffer
+        steps = task_buffer.parse_numbered_plan(plan_raw)
+        if not steps:
+            print("[PLAN] Could not parse numbered steps from J's output.")
+            print("[PLAN] Falling back to single-step execution.")
+            steps = [{
+                "id": "s1",
+                "goal": objective,
+                "depends": [],
+                "status": "pending",
+                "result": "",
+            }]
+
+        n_written = task_buffer.write_plan(steps)
+        print(f"\n[BUFFER] {n_written} step(s) queued:")
+        print(task_buffer.summary())
+        rlog.event("buffer_plan_parsed", steps=n_written)
+
+    # ── Phase 2: EXECUTE — one step at a time, clean context ────
+    exec_prefix = ""
+    try:
+        exec_prefix = (PROMPTS_DIR / "execute_mode.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        exec_prefix = ("EXECUTE MODE: You have a plan. Execute the current step now.\n"
+                       "Call exactly ONE tool.")
+
+    while True:
+        step = task_buffer.next_step()
+        if step is None:
+            break
+
+        step_id = step["id"]
+        goal = step["goal"]
+        print(f"\n{'='*50}")
+        print(f"[STEP {step_id}] {goal}")
+        print("=" * 50)
+
+        # Build a FRESH message list — system + step prompt only
+        step_messages = [
+            {"role": _system_role(client), "content": SYSTEM_PROMPT},
+        ]
+
+        # Add the step prompt with execute prefix
+        step_content = task_buffer.step_prompt(step)
+        full_prompt = f"{exec_prefix}\n\n{step_content}"
+        step_messages.append({"role": "user", "content": full_prompt})
+
+        # Run the step through the normal turn machinery
+        print("J.: ", end="", flush=True)
+        try:
+            step_reply = _run_turn(
+                client, step_messages, logger, rlog,
+                full_prompt, registry, autonomy_mode,
+                tool_budget=2,  # max 2 tool calls per step
+            )
+        except TransportError as error:
+            step_reply = f"[ERROR] {error}"
+
+        # Check if the router handled the goal directly
+        route_result = fast_route(goal, registry)
+        if route_result.handled and not step_reply.strip():
+            step_reply = route_result.output
+
+        # Evaluate result
+        is_error = any(m in step_reply for m in ("[TOOL ERROR]", "[ERROR]", "FAILED"))
+        if is_error:
+            task_buffer.mark_failed(step_id, step_reply[:200])
+            print(f"\n[STEP {step_id} FAILED]")
+            rlog.event("buffer_step_failed", step=step_id)
+            # Don't abort — continue with independent steps
+        else:
+            result_summary = step_reply[:200].replace("\n", " ").strip()
+            task_buffer.mark_done(step_id, result_summary)
+            print(f"\n[STEP {step_id} DONE]")
+            rlog.event("buffer_step_done", step=step_id)
+
+        # Compress into working memory for cross-step recall
+        wm_entry = working_memory.compress_turn(goal, step_reply)
+        working_memory.append(**wm_entry)
+
+    # ── Phase 4: SUMMARY ────────────────────────────────────────
+    buf_summary = task_buffer.summary()
+    done = task_buffer.done_count()
+    total = len(task_buffer.read_all())
+    failed = task_buffer.failed_count()
+
+    print(f"\n{'='*50}")
+    print(f"[PLAN COMPLETE] {done}/{total} steps done"
+          + (f", {failed} failed" if failed else ""))
+    print("=" * 50)
+    print(f"\n{buf_summary}")
+
+    # Ask J for a final summary (1 inference)
+    summary_messages = [
+        {"role": _system_role(client), "content": SYSTEM_PROMPT},
+        {"role": "user", "content": (
+            f"You just completed a multi-step task. Here are the results:\n\n"
+            f"{buf_summary}\n\n"
+            f"Summarize what was accomplished in 2-3 sentences."
+        )},
+    ]
+    print("\nJ.: ", end="", flush=True)
+    final_summary = _stream_reply(client, summary_messages)
+    print()
+    logger.append("assistant", f"[PLAN SUMMARY]\n{final_summary}")
+    rlog.event("buffer_plan_complete", done=done, total=total, failed=failed)
+
+    # Clean up buffer
+    task_buffer.clear()
+
+    return final_summary
+
+
 # ── Quick build (preserved from version-1.0) ────────────────────────
 
 
@@ -696,7 +861,7 @@ def run_chat(
             print(f"Prompt:  {preview}...")
         else:
             print("⚠ WARNING: System prompt is EMPTY — J-system.txt may be missing!")
-        print("Commands: quit, exit, /help, /tools, /plan, /model, /mode, /memory, /snapshot, /sandbox, /refactor, /optimize, /report")
+        print("Commands: quit, exit, /help, /tools, /plan, /steps, /buffer, /model, /mode, /memory, /snapshot, /sandbox, /refactor, /optimize, /report")
         if client.backend == "llama_cpp":
             print(f"Server log: {local_server.log_path}")
 
@@ -723,6 +888,9 @@ def run_chat(
                     "  /snapshot        — show hardware snapshot\n"
                     "  /tools           — list available tools\n"
                     "  /plan <goal>     — enter agent mode (plan → execute → verify)\n"
+                    "  /steps <steps>   — manual step injection (numbered or tool commands)\n"
+                    "  /buffer          — show current task buffer state\n"
+                    "  /buffer clear    — clear the task buffer\n"
                     "  /index           — index the project directory\n"
                     "  /mode <level>    — change autonomy (manual/semi/auto-safe/auto-full)\n"
                     "  /model <name>    — hot-swap the model (e.g. /model gemma4:e2b)\n"
@@ -942,11 +1110,70 @@ def run_chat(
             if user_message.startswith("/plan "):
                 objective = user_message[6:].strip()
                 if objective:
-                    _run_agent_task(
-                        client, messages, logger, rlog, registry, objective, autonomy_mode
-                    )
+                    # Small context (≤2048): use lightweight buffer-based flow
+                    # Large context: use full agent task with DAG execution
+                    if client.num_ctx <= 2048:
+                        _run_buffer_plan(
+                            client, messages, logger, rlog, registry, objective, autonomy_mode
+                        )
+                    else:
+                        _run_agent_task(
+                            client, messages, logger, rlog, registry, objective, autonomy_mode
+                        )
                 else:
                     print("Usage: /plan <describe your goal>")
+                continue
+
+            if user_message.startswith("/steps"):
+                # Manual step injection — user provides numbered steps or
+                # tool commands, J executes them one at a time.
+                # Usage: /steps
+                #   1. run_search should_reflect app/chat.py
+                #   2. run_read app/chat.py
+                #   3. Fix the bug on line 42
+                body = user_message[6:].strip()
+                if not body:
+                    # Check if there's an existing buffer
+                    if task_buffer.pending_count() > 0:
+                        print(task_buffer.summary())
+                    else:
+                        print("Usage: /steps <numbered steps or tool commands>")
+                        print("Example:")
+                        print("  /steps")
+                        print("  1. run_search should_reflect app/chat.py")
+                        print("  2. run_read app/chat.py")
+                        print("  3. Add auto-reflection after line 950")
+                    continue
+                # Try numbered steps first, then tool commands
+                steps = task_buffer.parse_numbered_plan(body)
+                if not steps:
+                    steps = task_buffer.parse_tool_commands(body)
+                if not steps:
+                    print("[STEPS] Could not parse steps from input.")
+                    continue
+                n = task_buffer.write_plan(steps)
+                print(f"[STEPS] {n} step(s) loaded into buffer.")
+                print(task_buffer.summary())
+                # Execute via buffer plan (skip LLM planning — user already provided steps)
+                _run_buffer_plan(
+                    client, messages, logger, rlog, registry,
+                    "Execute user-provided steps", autonomy_mode,
+                    skip_planning=True,
+                )
+                continue
+
+            if user_message == "/buffer":
+                # Show current task buffer state
+                buf = task_buffer.read_all()
+                if buf:
+                    print(task_buffer.summary())
+                else:
+                    print("[TASK BUFFER] Empty.")
+                continue
+
+            if user_message == "/buffer clear":
+                task_buffer.clear()
+                print("[TASK BUFFER] Cleared.")
                 continue
 
             if _handle_quick_build(user_message, registry, logger):
