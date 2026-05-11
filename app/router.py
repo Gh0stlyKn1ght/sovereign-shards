@@ -35,13 +35,19 @@ class RouteResult:
 
 # Obvious shell commands (prefixes that are unambiguous)
 _SHELL_PREFIXES = (
+    # Unix
     "python ", "python3 ", "pip ", "pip3 ",
     "git ", "ls ", "cat ", "cd ", "mkdir ", "rm ", "mv ", "cp ",
     "find ", "grep ", "head ", "tail ", "wc ", "chmod ", "touch ",
-    "echo ", "pwd", "tree ", "which ", "curl ", "wget ",
+    "echo ", "tree ", "which ", "curl ", "wget ",
     "npm ", "node ", "cargo ", "make ", "cmake ",
     "docker ", "pytest ", "bash ", "sh ",
+    # Windows
+    "dir ", "type ", "del ", "copy ", "move ", "md ", "rd ",
+    "cls", "ver",
 )
+# Bare commands (no args needed)
+_BARE_SHELL = ("pwd", "dir", "cls", "ver")
 
 # Explicit tool-call syntax: run_bash <cmd>, run_read <path>, etc.
 _TOOL_PREFIX_RE = re.compile(r"^(run_\w+)\s*(.*)", re.DOTALL)
@@ -74,23 +80,25 @@ def route(user_input: str, registry: "ToolRegistry") -> RouteResult:
     if stripped.startswith("/"):
         return RouteResult(handled=False)
 
-    # ── 2. Explicit run_* tool prefix ───────────────────────────────
-    m = _TOOL_PREFIX_RE.match(stripped)
-    if m:
-        tool_name = m.group(1)
-        rest = m.group(2).strip()
-        if tool_name in registry.tools:
-            args = _split_args(rest) if rest else []
-            output = registry.execute(tool_name, args)
-            return RouteResult(
-                handled=True,
-                tool_name=tool_name,
-                tool_args=args,
-                output=output,
-            )
+    # ── 2. Explicit tool name prefix (run_read, write_file, etc.) ───
+    # Match ANY registered tool name, not just run_* prefixes.
+    first_word = stripped.split()[0] if stripped.split() else ""
+    if first_word in registry.tools:
+        rest = stripped[len(first_word):].strip()
+        args = _split_args(rest) if rest else []
+        # Default path for list_dir when no args given
+        if first_word == "list_dir" and not args:
+            args = ["."]
+        output = registry.execute(first_word, args)
+        return RouteResult(
+            handled=True,
+            tool_name=first_word,
+            tool_args=args,
+            output=output,
+        )
 
     # ── 3. Obvious shell commands → run_bash ────────────────────────
-    if any(lowered.startswith(p) for p in _SHELL_PREFIXES) or lowered == "pwd":
+    if any(lowered.startswith(p) for p in _SHELL_PREFIXES) or lowered in _BARE_SHELL:
         return _dispatch_bash(stripped, registry)
 
     # ── 4. Bare command with known executable pattern ───────────────
