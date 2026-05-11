@@ -24,6 +24,9 @@ TOOL REFERENCE (use exactly these arg formats):
   run_tree [path]                    — Directory tree listing.
   run_git <subcommand> [args]        — Git operations (status, diff, log, etc).
   run_test <command>                 — Run tests.
+  run_shield <sub> [path]            — Shard defence: verify, baseline, autorun, wipe <path>.
+  run_scan <sub> [target]            — Host audit: ports, creds, security, network, services, permissions, full.
+  run_bridge <sub>                   — Remediation: report, script, rescan.
   list_dir [path]                    — List directory contents.
   write_file <path> <content>        — Write a file (builtin).
   system_snapshot                    — System info.
