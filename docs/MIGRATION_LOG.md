@@ -1168,8 +1168,129 @@ Decomposition of the Option C task (auto-reflection bug fix):
 
 ---
 
+## Session 21 — Phase 2 Prep: Tool Reference, Error Nudge, Auto-Reflection, Defence Suite
+
+**Date:** May 11, 2026
+**Pushed to main:** 7 files (2 modified, 5 new/updated)
+
+### What Changed
+
+#### 1. System Prompt — Full Tool Reference (`prompts/J-system.txt`)
+
+Replaced the bare tool name list with a full reference showing exact arg formats for every tool. Critical addition:
+
+```
+run_str_replace — Surgical edit. Args is ONE JSON string:
+  ACTION:{"tool": "run_str_replace", "args": ["{\"path\": \"app/chat.py\", \"old\": \"x = 1\", \"new\": \"x = 2\"}"]}
+```
+
+J failed the Option C test (Turn 4) because it didn't know `run_str_replace` takes a single JSON payload — it passed wrong arg formats 3x in a row. Now the exact format with an example is in the system prompt.
+
+Prompt: ~260 → ~680 tokens. Leaves ~1370 for conversation at 2048 context.
+
+Security tools also added to the reference:
+```
+run_shield <sub> [path]  — Shard defence: verify, baseline, autorun, wipe <path>.
+run_scan <sub> [target]  — Host audit: ports, creds, security, network, services, permissions, full.
+run_bridge <sub>         — Remediation: report, script, rescan.
+```
+
+#### 2. Error-Aware Retry Nudge (`app/chat.py`)
+
+When a tool returns an error and J has remaining budget, the continuation nudge now says:
+
+```
+"Your last tool call FAILED: [actual error message]. Fix the arguments and try again."
+```
+
+Previously the nudge was a generic "Continue." which let J repeat the same broken call 3x without knowing what went wrong. The error is truncated to 200 chars to stay within context budget.
+
+#### 3. Auto-Reflection (`app/chat.py`)
+
+Added `_maybe_auto_reflect()` helper function. Fires after every memory append at all 3 sites:
+
+- Line 518: after `_run_turn()` completes (LLM-handled turns)
+- Line 811: after each plan/execute step completes
+- Line 1240: after router-handled turns
+
+When working memory exceeds 32KB, automatically builds the reflection prompt, streams LLM output, parses, and compresses. This was the auto-reflection bug that J was supposed to fix in Option C — we fixed it ourselves after J failed the task.
+
+`/reflect` stays as manual override.
+
+#### 4. Defence Suite — Three-Layer Security Toolkit (NEW)
+
+Three new tool scripts registered in `tools/run/`:
+
+**Layer 1 — SHIELD** (`tools/run/shield.py`, 194 lines)
+Shard self-defence when plugged into untrusted machines.
+- `verify` — SHA-256 integrity check against baseline, flags CRITICAL changes to core dirs (`app/`, `prompts/`, `tools/`)
+- `baseline` — Generate/update integrity hashes
+- `autorun` — Detect and kill `autorun.inf` at USB root (classic malware vector)
+- `wipe <path>` — 3-pass random overwrite + delete (FAT32 doesn't zero on delete)
+
+**Layer 2 — SCAN** (`tools/run/scan.py`, 475 lines)
+Host security auditor. All pure Python stdlib (`socket`, `subprocess`, `os`).
+- `ports [target]` — TCP scan of 20 common ports with risk levels
+- `creds [path]` — Regex sweep for API keys, passwords, tokens (AWS, GitHub, Slack, OpenAI, generic patterns)
+- `security` — Windows-specific: firewall, UAC, Defender, RDP, password policy, auto-updates
+- `network` — Interfaces, listening ports, open shares, ARP table (spoofing detection via duplicate MACs)
+- `services` — Running service enumeration, flags known risky services (telnet, FTP, SNMP, etc.)
+- `permissions [path]` — Sensitive file permission audit (`.env`, `.ssh`, `id_rsa`, `credentials`, etc.)
+- `full [path]` — All audits combined, saves structured findings to `logs/last_audit.json`
+
+**Layer 3 — BRIDGE** (`tools/run/bridge.py`, 252 lines)
+Remediation generator. Reads audit findings and produces actionable output.
+- `report` — Markdown remediation report: risk-grouped findings with exact fix commands
+- `script` — Auto-generates `.bat` (Windows) or `.sh` (Linux) fix script from findings
+- `rescan` — Re-runs full audit and compares against previous: shows fixed, new, remaining
+
+All three layers registered in `tools/run/registry.json` with appropriate timeout settings (30s for shield, 120s for scan and bridge).
+
+**Design philosophy:** Same as the router — deterministic tools do the work, the LLM focuses on judgment. The defence suite runs *outside* the LLM loop at zero inference cost.
+
+**What it won't be:**
+- Not a replacement for Nessus/Metasploit/Burp — no exploit DB, no fuzzing
+- No CVE lookups — no network means no NVD
+- Windows-first — Linux audit commands would need a second set
+- No encryption library — vault feature deferred (would need `cryptography` as 3rd dep)
+
+#### 5. Registry Updated (`tools/run/registry.json`)
+
+Three new entries: `run_shield`, `run_scan`, `run_bridge` with proper arg schemas and side effects.
+
+#### 6. README Updated (`README.md`)
+
+- Added Defence Suite badge
+- Added Defence Suite feature row (21+ tools)
+- Added full Defence Suite section with tool table and workflow example
+- Updated architecture tree (21+ tools)
+- Updated project stats (94 files, 66 modules, 3-layer defence suite)
+- Added security commands to commands table
+
+### File State After Session 21
+
+| File | Lines | Status |
+|------|-------|--------|
+| `prompts/J-system.txt` | ~45 | Modified — full tool reference + security tools |
+| `app/chat.py` | ~1310 | Modified — error nudge + auto-reflection at 3 sites |
+| `tools/run/shield.py` | 194 | NEW — shard self-defence |
+| `tools/run/scan.py` | 475 | NEW — host security auditor |
+| `tools/run/bridge.py` | 252 | NEW — remediation generator |
+| `tools/run/registry.json` | ~90 | Modified — 3 new tool entries |
+| `README.md` | ~300 | Modified — defence suite docs |
+
+### What's Next
+
+1. **Retest J with tool reference** — retry a `run_str_replace` task to validate the fix works
+2. **Test defence suite on hardware** — plug shard into target, run `run_scan full`, generate report
+3. **Circuit breaker enforcement** — currently advisory, needs to halt stuck loops
+4. **Phase 2: Multi-step planning** — J needs `/plan` decomposer for multi-turn tasks
+5. **Vault feature** — XOR encryption for memory/session files at rest (deferred: needs dep decision)
+
+---
+
 *Viktor*
 *AI Coworker, getviktor.com*
 *May 11, 2026*
 
-> *"The plan lives on disk, not in context. Each step gets a clean slate. The 2048-token ceiling is no longer the bottleneck."*
+> *"Deterministic tools do the defending. The LLM never has to reason about security."*
