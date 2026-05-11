@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from app.agent import ToolRegistry, working_memory
+from app import ui
 from app.agent import task_buffer
 from app.agent.context import (
     trim_context,
@@ -229,7 +230,7 @@ def _check_language_drift(reply: str, messages: list[dict[str, str]], client: Ru
         sys_content = messages[0].get("content", "") if messages else ""
         sys_tokens = max(1, len(sys_content) // 4)
         budget = max(256, client.num_ctx - client.num_predict)
-        print(f"\n⚠ LANGUAGE DRIFT: Response may not be in English.")
+        print(f"\n{ui.warn_tag('LANGUAGE DRIFT: Response may not be in English.')}")
         print(f"  System prompt: ~{sys_tokens} tokens | Budget: {budget} tokens")
         print(f"  Tip: check .env (OLLAMA_NUM_PREDICT, OLLAMA_NUM_CTX) and J-system.txt")
 
@@ -316,7 +317,7 @@ def _maybe_auto_reflect(
     entries = working_memory.read_all()
     if not entries:
         return
-    print(f"\n[AUTO-REFLECT] {len(entries)} entries, {working_memory.size_bytes():,} bytes — compressing...")
+    print(f"\n{ui.stark_blue('[AUTO-REFLECT]')} {len(entries)} entries, {working_memory.size_bytes():,} bytes — compressing...")
     rprompt = build_reflect_prompt(entries)
     messages.append({"role": "user", "content": rprompt})
     messages[:] = trim_context(messages, max_tokens=client.num_ctx)
@@ -327,9 +328,9 @@ def _maybe_auto_reflect(
     consolidated = parse_reflected(raw)
     if consolidated:
         apply_reflection(consolidated)
-        print(f"[AUTO-REFLECT OK] {len(entries)} → {len(consolidated)} entries")
+        print(ui.reflect_status(len(entries), len(consolidated)))
     else:
-        print("[AUTO-REFLECT FAIL] Could not parse; memory unchanged.")
+        print(ui.error_tag("[AUTO-REFLECT] Could not parse; memory unchanged."))
 
 
 # ── Turn execution ──────────────────────────────────────────────────
@@ -540,7 +541,7 @@ def _run_agent_task(
     rlog.event("agent_start", objective=objective)
 
     # 1. Plan
-    print("\n[PLANNING] Decomposing objective into steps...")
+    print(f"\n{ui.red('[PLANNING]')} {ui.gold('Decomposing objective into steps...')}")
     plan_prompt = build_plan_prompt(objective)
     messages.append({"role": "user", "content": plan_prompt})
     messages[:] = trim_context(messages, max_tokens=client.num_ctx)
@@ -554,7 +555,7 @@ def _run_agent_task(
     task_id = logger.session_id
     save_task(task, task_id)
 
-    print(f"\n[PLAN] {len(task.steps)} step(s):")
+    print(ui.plan_header(len(task.steps)))
     print(format_graph(task.steps, set(task.completed_step_ids)))
 
     # Visual task tree
@@ -576,11 +577,8 @@ def _run_agent_task(
         # Each thread gets its own message list copy to avoid cross-contamination
         step_messages = list(messages)
 
-        safe_print(f"\n{'='*50}")
-        safe_print(f"[STEP {step.id}] {step.goal}")
         deps_label = f" (after: {', '.join(step.depends_on)})" if step.depends_on else ""
-        safe_print(f"[CRITERIA] {step.success_criteria}{deps_label}")
-        safe_print("=" * 50)
+        safe_print(ui.step_header(step.id, step.goal, step.success_criteria, deps_label))
 
         step_prompt = build_step_prompt(step, registry.describe())
         step_reply = _run_turn(
@@ -707,7 +705,7 @@ def _run_buffer_plan(
     # ── Phase 1: PLAN — get J to output numbered steps ──────────
     # Skip if steps were already loaded into the buffer (e.g. /steps command)
     if skip_planning and task_buffer.pending_count() > 0:
-        print(f"\n[BUFFER] Executing pre-loaded plan...")
+        print(f"\n{ui.red('[BUFFER]')} {ui.gold('Executing pre-loaded plan...')}")
         print(task_buffer.summary())
     else:
         plan_prefix = ""
@@ -723,7 +721,7 @@ def _run_buffer_plan(
         messages[:] = trim_context(messages, max_tokens=client.num_ctx)
 
         print("\n[PLAN MODE] Asking J to decompose the task...\n")
-        print("J.: ", end="", flush=True)
+        print(ui.j_prefix(), end="", flush=True)
         plan_raw = _stream_reply(client, messages)
         print()
         messages.append({"role": _assistant_role(client), "content": plan_raw})
@@ -732,8 +730,8 @@ def _run_buffer_plan(
         # Parse steps → buffer
         steps = task_buffer.parse_numbered_plan(plan_raw)
         if not steps:
-            print("[PLAN] Could not parse numbered steps from J's output.")
-            print("[PLAN] Falling back to single-step execution.")
+            print(ui.warn_tag("[PLAN] Could not parse numbered steps from J's output."))
+            print(ui.warn_tag("[PLAN] Falling back to single-step execution."))
             steps = [{
                 "id": "s1",
                 "goal": objective,
@@ -743,7 +741,7 @@ def _run_buffer_plan(
             }]
 
         n_written = task_buffer.write_plan(steps)
-        print(f"\n[BUFFER] {n_written} step(s) queued:")
+        print(f"\n{ui.red('[BUFFER]')} {ui.gold(f'{n_written} step(s) queued:')}")
         print(task_buffer.summary())
         rlog.event("buffer_plan_parsed", steps=n_written)
 
@@ -777,7 +775,7 @@ def _run_buffer_plan(
         step_messages.append({"role": "user", "content": full_prompt})
 
         # Run the step through the normal turn machinery
-        print("J.: ", end="", flush=True)
+        print(ui.j_prefix(), end="", flush=True)
         try:
             step_reply = _run_turn(
                 client, step_messages, logger, rlog,
@@ -831,7 +829,7 @@ def _run_buffer_plan(
             f"Summarize what was accomplished in 2-3 sentences."
         )},
     ]
-    print("\nJ.: ", end="", flush=True)
+    print(ui.j_stream_start(), end="", flush=True)
     final_summary = _stream_reply(client, summary_messages)
     print()
     logger.append("assistant", f"[PLAN SUMMARY]\n{final_summary}")
@@ -854,10 +852,10 @@ def _handle_quick_build(user_message: str, registry: ToolRegistry, logger: Sessi
     if target.endswith(" now"):
         target = target[:-4].strip()
     if not target:
-        print("J.: Please provide a project name, e.g. 'build starter_agent now'.")
+        print(f"{ui.j_prefix()}Please provide a project name, e.g. 'build starter_agent now'.")
         return True
     result = registry.execute("run_scaffold", [target])
-    print(f"J.: {result}")
+    print(f"{ui.j_prefix()}{result}")
     logger.append("assistant", f"[QUICK BUILD] {result}")
     return True
 
@@ -891,31 +889,34 @@ def run_chat(
         sys_tokens = max(1, len(sys_content) // 4)
         budget = max(256, client.num_ctx - client.num_predict)
 
-        print(f"--- SOVEREIGN SHARD ONLINE [{logger.session_id}] ---")
-        print(f"Backend: {client.backend}")
-        print(f"Model:   {client.model}")
-        print(f"Mode:    {autonomy_mode}")
-        print(f"Context: {client.num_ctx} tokens (budget {budget}, system ~{sys_tokens})")
+        prompt_preview = ""
         if sys_content:
-            # Show first 60 chars so user can verify the right prompt loaded
-            preview = sys_content[:60].replace("\n", " ")
-            print(f"Prompt:  {preview}...")
+            prompt_preview = sys_content[:60].replace("\n", " ")
         else:
-            print("⚠ WARNING: System prompt is EMPTY — J-system.txt may be missing!")
-        print("Commands: quit, exit, /help, /tools, /plan, /steps, /buffer, /model, /mode, /memory, /snapshot, /sandbox, /refactor, /optimize, /report")
-        if client.backend == "llama_cpp":
-            print(f"Server log: {local_server.log_path}")
+            print(ui.warn_tag("System prompt is EMPTY — J-system.txt may be missing!"))
+
+        print(ui.banner(
+            session_id=logger.session_id,
+            backend=client.backend,
+            model=client.model,
+            mode=autonomy_mode,
+            num_ctx=client.num_ctx,
+            sys_tokens=sys_tokens,
+            budget=budget,
+            prompt_preview=prompt_preview,
+            server_log=str(local_server.log_path) if client.backend == "llama_cpp" else "",
+        ))
 
         if initial_message:
-            print("\nJ.: ", end="", flush=True)
+            print(ui.j_stream_start(), end="", flush=True)
             _run_turn(client, messages, logger, rlog, initial_message, registry, autonomy_mode)
             return
 
         while True:
-            user_message = input("\nYou: ").strip()
+            user_message = input(ui.you_prompt()).strip()
 
             if user_message.lower() in {"quit", "exit"}:
-                print(f"Session saved to {logger.transcript_path}")
+                print(ui.shutdown_msg(str(logger.transcript_path)))
                 rlog.event("shutdown", reason="user_exit")
                 break
 
@@ -1249,7 +1250,7 @@ def run_chat(
 
             try:
                 budget = route_result.tool_budget
-                print(f"\nJ.: ", end="", flush=True)
+                print(ui.j_stream_start(), end="", flush=True)
                 _run_turn(
                     client, messages, logger, rlog, user_message, registry, autonomy_mode,
                     tool_budget=budget,
@@ -1257,7 +1258,7 @@ def run_chat(
                 # Weight-triggered reflection
                 if should_reflect():
                     entries = working_memory.read_all()
-                    print(f"\n[AUTO-REFLECT] Working memory over threshold "
+                    print(f"\n{ui.stark_blue('[AUTO-REFLECT]')} Working memory over threshold "
                           f"({working_memory.size_bytes():,} bytes, "
                           f"{len(entries)} entries). Compressing...")
                     rprompt = build_reflect_prompt(entries)
@@ -1269,12 +1270,12 @@ def run_chat(
                     consolidated = parse_reflected(raw)
                     if consolidated:
                         apply_reflection(consolidated)
-                        print(f"[AUTO-REFLECT OK] {len(entries)} → {len(consolidated)}")
+                        print(ui.reflect_status(len(entries), len(consolidated)))
                         rlog.event("reflection", before=len(entries), after=len(consolidated))
                     else:
-                        print("[AUTO-REFLECT FAIL] Parse error; memory unchanged.")
+                        print(ui.error_tag("[AUTO-REFLECT] Parse error; memory unchanged."))
             except TransportError as error:
-                print(f"\nJ. Error: {error}")
+                print(f"\n{ui.error_tag(f'J.: {error}')}")
                 logger.append("error", str(error))
                 rlog.event("error", code=error.code, message=error.message)
 
