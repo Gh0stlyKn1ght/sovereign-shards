@@ -23,7 +23,10 @@ def _ensure_dir() -> None:
 
 def append(step: str, result: str, issue: str | None = None,
            decision: str | None = None) -> None:
-    """Append a structured summary entry."""
+    """Append a structured summary entry.
+
+    FAT32-safe: fsync after each append so the entry survives power loss.
+    """
     _ensure_dir()
     entry: dict = {"ts": time.time(), "step": step, "result": result}
     if issue:
@@ -32,6 +35,8 @@ def append(step: str, result: str, issue: str | None = None,
         entry["decision"] = decision
     with open(WM_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def read_recent(n: int = 10) -> list[dict]:
@@ -72,12 +77,18 @@ def needs_reflection() -> bool:
 
 
 def replace_entries(entries: list[dict]) -> None:
-    """Atomic replace of all entries (used after reflection)."""
+    """Atomic replace of all entries (used after reflection).
+
+    FAT32-safe: fsync before replace to ensure bytes hit disk
+    before the directory entry is swapped.
+    """
     _ensure_dir()
     tmp = str(WM_PATH) + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         for entry in entries:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, str(WM_PATH))
 
 

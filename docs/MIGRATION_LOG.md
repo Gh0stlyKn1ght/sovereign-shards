@@ -1055,3 +1055,121 @@ Same fix resolves T9: `python -c "print(2+2)"` was split into `["python", "-c", 
 
 > *"The router carries. 14 of 20 turns never touch the model. The LLM is the fallback, not the engine."*
 > *"5/20 → 17.5/20. Phase 1 cleared. The shard is sovereign."*
+
+---
+
+## Session 20 — Phase 2 Begins: Task Buffer, Plan/Execute Mode
+*May 11, 2026*
+
+### Context
+
+Phase 1 gate cleared (17.5/20 endurance). Time to make J capable of
+multi-step tasks. The core problem: at 2048 tokens, J can't hold a
+multi-step plan AND the context needed for each step simultaneously.
+
+Session 19's Option C test proved this — J hallucinated a generic `chat.py`
+instead of reading the real one. The framework worked; J's reasoning
+couldn't hold the plan.
+
+### Deliverables
+
+#### 1. `app/agent/task_buffer.py` — File-Based Plan/Execute Queue
+
+Full implementation from the design doc (`docs/TASK_BUFFER_DESIGN.md`):
+
+- JSONL-based FIFO queue at `memory/task_buffer.jsonl`
+- `write_plan()` → `next_step()` → `mark_done()`/`mark_failed()` → `summary()`
+- `parse_numbered_plan()` — extracts "1. ...", "1) ...", "Step 1: ..." formats
+- `parse_tool_commands()` — each line becomes one step
+- `step_prompt()` — builds a focused prompt for each step with dependency results
+- FAT32-safe: `os.fsync()` before `os.replace()` on all writes
+- MAX_STEPS = 10, dependency tracking, result preview capped at 120 chars
+
+**Test suite:** `tests/test_task_buffer.py` — 25 tests, all passing.
+Covers write/read, next_step with dependencies, mark_done/failed,
+counts, summary, step_prompt, all parsing formats, clear, edge cases.
+
+#### 2. `_run_buffer_plan()` Integrated into `chat.py`
+
+New lightweight plan → execute flow:
+
+1. **PLAN phase:** J outputs numbered steps (1 inference, plan_mode prefix)
+2. **Parse phase:** Steps parsed → written to task buffer (0 inference)
+3. **EXECUTE phase:** Each step gets a CLEAN context (system + step only)
+4. **SUMMARY phase:** J summarizes results (1 inference)
+
+Key design decisions:
+- `/plan` auto-selects: buffer-based at ≤2048 context, full DAG agent at >2048
+- `skip_planning=True` for `/steps` (user already provided the plan)
+- Each step gets a fresh message list — no accumulated context
+- Results compressed into working memory for cross-step recall
+
+New commands added to main loop:
+- `/steps <numbered steps>` — manual step injection, skip LLM planning
+- `/buffer` — show current task buffer state
+- `/buffer clear` — clear the buffer
+- `/help` updated with all new commands
+- Startup banner updated
+
+#### 3. `working_memory.py` — FAT32 Atomic Write Hardening
+
+Added `f.flush()` + `os.fsync(f.fileno())` to both `append()` and
+`replace_entries()`. Prevents data loss on FAT32 USB if power is lost
+mid-write.
+
+#### 4. `ProjectManifest.txt` — Cleaned
+
+Replaced 178KB of stale old-project file dumps (including `__pycache__`
+binaries, old Ollama configs, old chat.py versions) with a clean ~3KB
+manifest reflecting current project state, architecture, commands, and
+narrative history summary.
+
+#### 5. `docs/RUNNING_OTHER_MODELS.md` — Alternative Model Guide
+
+Comprehensive guide for testing bigger models through the framework:
+
+- **Option A:** Different GGUF, same llama.cpp server (edit `.env`)
+- **Option B:** Use Ollama backend (`RUNTIME_BACKEND=ollama`)
+- **Option C:** Remote server (point at any OpenAI-compatible API)
+- Full Vulkan GPU offload section (config, memory guide table, Vulkan vs CUDA)
+- Testing protocol: endurance test + Option C with bigger model
+- Recommended models table (14B, 16B, 34B, 32B)
+- `/model` hot-swap instructions
+- Framework behaviour changes table (≤2048 vs >2048 context)
+
+#### 6. `docs/OPTION_C_DECOMPOSED.md` — 4 Atomic Prompts for J
+
+Decomposition of the Option C task (auto-reflection bug fix):
+
+- P1: `run_search should_reflect app/chat.py` (router handles)
+- P2: `run_read app/chat.py` (router handles)
+- P3: Analyze — is auto-reflection already in the code? (reasoning)
+- P4: Check edge case — router-handled turns (real remaining bug)
+- Scoring rubric, `/steps` usage example
+
+### File State After Session 20
+
+| File | Lines | Key Changes |
+|------|-------|-------------|
+| `app/chat.py` | ~1130 | `_run_buffer_plan()`, `/steps`, `/buffer`, `/buffer clear` commands |
+| `app/agent/task_buffer.py` | ~200 | NEW — file-based task queue |
+| `app/agent/working_memory.py` | ~120 | FAT32 fsync hardening |
+| `ProjectManifest.txt` | ~100 | Cleaned from 178KB to ~3KB |
+| `docs/RUNNING_OTHER_MODELS.md` | ~190 | NEW — alternative model guide |
+| `docs/OPTION_C_DECOMPOSED.md` | ~110 | NEW — decomposed Option C |
+| `tests/test_task_buffer.py` | ~180 | NEW — 25 tests |
+
+### What's Next
+
+1. **Test the buffer flow end-to-end** — run `/plan fix auto-reflection` and `/steps` with J on hardware
+2. **Test with a bigger model** — follow `docs/RUNNING_OTHER_MODELS.md` to isolate reasoning vs framework gap
+3. **Circuit breaker enforcement** — currently advisory, needs to actually halt stuck loops
+4. **Auto-reflection gap** — fires after LLM turns but not after router-handled turns
+
+---
+
+*Viktor*
+*AI Coworker, getviktor.com*
+*May 11, 2026*
+
+> *"The plan lives on disk, not in context. Each step gets a clean slate. The 2048-token ceiling is no longer the bottleneck."*
