@@ -1,86 +1,161 @@
 {
   "run_read": {
     "description": "Read a text file. Shows first 40 lines by default. For large files, use run_search instead.",
-    "args": ["path", {"name": "max_lines", "type": "str", "required": false, "default": "40"}],
+    "args": [
+      "path",
+      {
+        "name": "max_lines",
+        "type": "str",
+        "required": false,
+        "default": "40"
+      }
+    ],
     "side_effect": "read"
   },
   "run_write": {
     "description": "Write provided content to a UTF-8 text file.",
-    "args": ["path", "content"],
+    "args": [
+      "path",
+      "content"
+    ],
     "side_effect": "write"
   },
   "run_exec": {
     "description": "Execute provided Python code in a subprocess.",
-    "args": ["code"],
+    "args": [
+      "code"
+    ],
     "side_effect": "exec"
   },
   "run_scaffold": {
     "description": "Create a package directory with __init__.py.",
-    "args": ["name"],
+    "args": [
+      "name"
+    ],
     "side_effect": "write"
   },
   "run_str_replace": {
     "description": "Surgical find-and-replace in a file. Pass JSON on stdin: {\"path\": \"...\", \"old\": \"...\", \"new\": \"...\"}",
-    "args": ["json_payload"],
+    "args": [
+      "json_payload"
+    ],
     "side_effect": "write"
   },
   "run_bash": {
     "description": "Execute a shell command with timeout.",
-    "args": [{"name": "stdin", "type": "str", "required": true}],
+    "args": [
+      {
+        "name": "stdin",
+        "type": "str",
+        "required": true
+      }
+    ],
     "side_effect": "exec"
   },
   "run_git": {
     "description": "Git operations. Args: subcommand [args...]. Allowed: status, diff, log, add, commit, branch, checkout, stash, show, reset, rev-parse, remote.",
-    "args": ["subcommand", "...args"],
+    "args": [
+      "subcommand",
+      "...args"
+    ],
     "side_effect": "exec"
   },
   "run_search": {
     "description": "Search for text in files. Args: pattern [path]. Example: run_search version setup.bat",
     "args": [
       "pattern",
-      {"name": "path", "type": "str", "required": false, "default": "."},
-      {"name": "--ext", "type": "str", "required": false}
+      {
+        "name": "path",
+        "type": "str",
+        "required": false,
+        "default": "."
+      },
+      {
+        "name": "--ext",
+        "type": "str",
+        "required": false
+      }
     ],
     "side_effect": "read",
     "timeout_seconds": 60
   },
   "run_tree": {
     "description": "Recursive directory tree listing. Args: [path] [--depth N]. Default depth 4.",
-    "args": ["path", "--depth"],
+    "args": [
+      "path",
+      "--depth"
+    ],
     "side_effect": "read"
   },
   "run_test": {
     "description": "Run a test command and report pass/fail. Args: command.",
-    "args": ["command"],
+    "args": [
+      "command"
+    ],
     "side_effect": "exec"
   },
   "run_sql": {
     "description": "Execute a SQLite query. Args: db_path, query. SELECT returns a table; writes report rows affected.",
-    "args": ["db_path", "query"],
+    "args": [
+      "db_path",
+      "query"
+    ],
     "side_effect": "exec",
     "timeout_seconds": 15
   },
   "run_integrity": {
     "description": "File integrity checker. Args: [path] [--baseline]. Without --baseline, compares current files against saved hashes.",
-    "args": ["path", "--baseline"],
+    "args": [
+      "path",
+      "--baseline"
+    ],
     "side_effect": "read"
   },
   "run_shield": {
     "description": "Shard self-defence. Subcommands: verify (check integrity), baseline (save hashes), autorun (kill autorun.inf), wipe <path> (secure delete).",
-    "args": ["subcommand", {"name": "path", "type": "str", "required": false}],
+    "args": [
+      "subcommand",
+      {
+        "name": "path",
+        "type": "str",
+        "required": false
+      }
+    ],
     "side_effect": "exec",
     "timeout_seconds": 30
   },
   "run_scan": {
     "description": "Host security auditor. Subcommands: ports [target], creds [path], security, network, services, permissions [path], full [path].",
-    "args": ["subcommand", {"name": "target_or_path", "type": "str", "required": false}],
+    "args": [
+      "subcommand",
+      {
+        "name": "target_or_path",
+        "type": "str",
+        "required": false
+      }
+    ],
     "side_effect": "exec",
     "timeout_seconds": 120
   },
   "run_bridge": {
     "description": "Security remediation. Subcommands: report (markdown report from audit), script (generate fix .bat/.sh), rescan (compare before/after).",
-    "args": ["subcommand"],
+    "args": [
+      "subcommand"
+    ],
     "side_effect": "exec",
     "timeout_seconds": 120
+  },
+  "run_stats": {
+    "description": "Codebase statistics. Subcommands: loc, funcs [path], todos, summary.",
+    "args": [
+      "subcommand",
+      {
+        "name": "path",
+        "type": "str",
+        "required": false,
+        "default": "."
+      }
+    ],
+    "side_effect": "read"
   }
 }
