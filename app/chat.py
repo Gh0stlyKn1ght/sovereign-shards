@@ -346,7 +346,7 @@ def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
                 content = maybe_evaluate(content)
                 emit(content)
                 reply_chunks.append(content)
-        result = "".join(reply_chunks)
+        result = persona.strip_bleed("".join(reply_chunks))
         _check_language_drift(result, messages, client)
         return result
 
@@ -363,6 +363,7 @@ def _stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str:
                 full_reply += content
             if chunk.get("done"):
                 break
+        full_reply = persona.strip_bleed(full_reply)
         _check_language_drift(full_reply, messages, client)
         return full_reply
 
@@ -986,8 +987,16 @@ def run_chat(
         ))
 
         if initial_message:
-            print(ui.j_stream_start(), end="", flush=True)
-            _run_turn(client, messages, logger, rlog, initial_message, registry, autonomy_mode)
+            # Route through the fast router first (catches math, shell, etc.)
+            route_result = fast_route(initial_message, registry)
+            if route_result.handled:
+                print(f"\n[{route_result.tool_name}] {route_result.output}")
+                logger.append("system", f"[ROUTED] {route_result.tool_name}: {route_result.output[:500]}")
+                rlog.event("fast_route", tool=route_result.tool_name)
+            else:
+                print(ui.j_stream_start(), end="", flush=True)
+                _run_turn(client, messages, logger, rlog, initial_message, registry, autonomy_mode,
+                          tool_budget=route_result.tool_budget)
             return
 
         while True:

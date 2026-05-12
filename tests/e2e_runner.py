@@ -139,12 +139,12 @@ def _run_reflect(client, messages, logger):
 TESTS = [
     # ── Block A: Foundation ──────────────────────────────────────
     {
-        "id": 1, "block": "A", "name": "Pure chat — math (budget=0)",
+        "id": 1, "block": "A", "name": "Router: calculator (run_calc)",
         "prompt": "What is 47 times 13?",
-        "kind": "llm",
+        "kind": "router",
         "validate": lambda reply, cap: (
-            ("611" in reply or "611" in cap),
-            "611 found" if ("611" in reply or "611" in cap) else "611 NOT found in reply"
+            "611" in (reply or ""),
+            "611 found" if "611" in (reply or "") else f"output: {(reply or '')[:80]}"
         ),
     },
     {

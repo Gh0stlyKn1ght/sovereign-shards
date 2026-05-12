@@ -397,3 +397,53 @@ def sandbox_unsafe(failures: int) -> str:
         f"{failures} check(s) failed. Fix before pushing.",
         f"Hold. {failures} issue(s) in the sandbox.",
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  POST-GENERATION CLEANUP
+# ═══════════════════════════════════════════════════════════════════
+
+import re as _re
+
+# Patterns the base model likes to append that break J's voice.
+# Each is compiled once at import time.
+_BLEED_PATTERNS = [
+    _re.compile(
+        r"\s*If you (?:have any (?:other )?questions?|need (?:any )?(?:further|more) "
+        r"(?:assistance|help|information)).*$",
+        _re.IGNORECASE | _re.DOTALL,
+    ),
+    _re.compile(
+        r"\s*(?:Feel free to ask|Don'?t hesitate to (?:ask|reach out)|"
+        r"Let me know if (?:you (?:need|have)|there'?s) anything).*$",
+        _re.IGNORECASE | _re.DOTALL,
+    ),
+    _re.compile(
+        r"\s*I'?m (?:here|happy|glad|ready) to (?:help|assist).*$",
+        _re.IGNORECASE | _re.DOTALL,
+    ),
+    _re.compile(
+        r"\s*Is there anything else (?:you(?:'d| would) like|I can).*$",
+        _re.IGNORECASE | _re.DOTALL,
+    ),
+    # "I am J here to help with anything within my programming and capabilities."
+    _re.compile(
+        r"\s*I am \w+ here to help.*$",
+        _re.IGNORECASE | _re.DOTALL,
+    ),
+]
+
+
+def strip_bleed(text: str) -> str:
+    """Remove generic assistant-persona boilerplate from LLM output.
+
+    Catches the polite outro that base models (Qwen, Llama, etc.) like to
+    append regardless of the system prompt.  Runs in O(n) per pattern —
+    cheap enough to call on every reply.
+    """
+    cleaned = text
+    for pat in _BLEED_PATTERNS:
+        cleaned = pat.sub("", cleaned)
+    # Don't return empty — if stripping ate everything, keep original
+    stripped = cleaned.strip()
+    return stripped if stripped else text.strip()
