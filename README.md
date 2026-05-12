@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-v1.0--rc-brightgreen?style=for-the-badge" alt="Status: v1.0 RC" />
+  <img src="https://img.shields.io/badge/phase_1-CLEARED-brightgreen?style=for-the-badge" alt="Phase 1: Cleared" />
   <img src="https://img.shields.io/badge/runs_on-USB_drive-blue?style=for-the-badge" alt="Runs on USB" />
   <img src="https://img.shields.io/badge/cloud-none-critical?style=for-the-badge" alt="No Cloud" />
   <img src="https://img.shields.io/badge/deps-2-yellow?style=for-the-badge" alt="2 Dependencies" />
@@ -15,14 +15,16 @@
 
 <p align="center">
   <strong>A fully local AI developer agent that runs from a USB stick.</strong><br/>
-  No cloud. No API keys. No internet. Plug in and build.
+  No cloud. No API keys. No internet. Two dependencies. Plug in and build.
 </p>
 
 <p align="center">
   <a href="https://sovereign-shards-62eaaf99.viktor.space">Landing Page</a> · 
   <a href="https://five-masters-b9b95dc3.viktor.space">The Five Masters</a> · 
   <a href="docs/USER_MANUAL.md">User Manual</a> · 
-  <a href="docs/ROADMAP.md">Roadmap</a>
+  <a href="docs/ROADMAP.md">Roadmap</a> · 
+  <a href="docs/NEXT_10_STEPS.md">Next 10 Steps</a> · 
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 ---
@@ -56,7 +58,9 @@ User Input
 └────────────────────────────┘
 ```
 
-Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in your pocket.
+Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in your pocket. No cloud account. No API key. No internet connection. Just your hardware.
+
+**Why this matters:** Every other autonomous coding agent (Claude Code, Codex, Cline, Aider) requires cloud APIs, internet, or heavy toolchains. J requires a USB port and 16 GB of RAM. The agent that runs in your pocket is the agent that runs anywhere.
 
 ---
 
@@ -66,16 +70,17 @@ Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in
 |---------|-------------|
 | 🧠 **Plan → Execute → Verify** | DAG-based task planner with dependency resolution, parallel execution, and automatic verification |
 | ⚡ **Fast Command Router** | Regex/keyword dispatcher handles shell, file, and code operations at zero inference cost — model only called when language understanding is needed |
-| 🔧 **21+ Built-In Dev Tools** | File editing, bash, git, search, tree, test, SQL, integrity hashing, security audit — all auto-discovered from `tools/run/` |
-| 🛡️ **Defence Suite** | Three-layer security toolkit: SHIELD (shard self-defence), SCAN (host security audit), BRIDGE (remediation). Portable air-gapped security auditor — plug into any machine, scan, fix, verify |
+| 🔧 **16+ Built-In Dev Tools** | File editing, bash, git, search, tree, test, SQL, integrity hashing, codebase stats — all auto-discovered from `tools/run/` |
+| 🛡️ **Defence Suite** | Three-layer security toolkit: SHIELD (shard self-defence), SCAN (host security audit), BRIDGE (remediation). Portable air-gapped security auditor |
 | 🔨 **Inference Tool Forge** | "Build a tool for X" → J researches the domain, generates code, validates in sandbox, and hot-registers the new tool mid-session |
 | 💾 **3-Tier Memory System** | Active context reconstruction + rolling working memory + persistent long-term memory with BM25 retrieval |
-| 🏛️ **The Five Masters** | AST-powered code governance — 5 engineering dimensions, 8 deterministic transforms, zero inference cost detection |
-| 🔬 **Code Optimizer** | `/optimize` command: analyse code against the Five Masters, apply deterministic fixes, then optional LLM-assisted semantic rewrites — the first product feature |
+| 🏛️ **The Five Masters** | AST-powered code governance — 5 engineering dimensions, 8 deterministic transforms, zero inference cost |
+| 🔬 **Code Optimizer** | `/optimize` command: analyse code against the Five Masters, apply deterministic fixes, then optional LLM-assisted semantic rewrites |
 | 🛡️ **Pre-Push Sandbox** | 5-check validation gauntlet (conflicts, syntax, AST, tests, Five Masters) — nothing broken leaves the drive |
 | 🔄 **Self-Healing Circuit Breaker** | Detects stuck loops, repeat errors, and runaway turns — auto-recovers or gracefully exits |
 | 📡 **Streaming Output** | Real-time line-by-line tool output — see builds, tests, and processes as they happen |
-| 🧪 **147+ Test Suite** | Full `unittest` coverage: memory, retriever, planner, executor, sandbox, forge, circuit breaker, optimizer — runs anywhere with zero test deps |
+| 🧪 **147+ Test Suite** | Full `unittest` coverage: memory, retriever, planner, executor, sandbox, forge, circuit breaker, optimizer |
+| 🎨 **Iron Man Terminal UI** | Stark Blue, Gold, Red colour scheme with arc reactor ASCII banner — zero dependencies, pure ANSI |
 | 🔒 **Fully Offline** | Zero network calls. Zero telemetry. Your code never leaves your machine |
 
 ---
@@ -105,6 +110,17 @@ pip install python-dotenv psutil
 cp .env.example .env            # Edit for your hardware
 python run.py --doctor           # Preflight check
 python run.py                    # Launch
+```
+
+### First Things to Try
+
+```
+hey J                  → verify identity
+ls .                   → verify tool execution
+read README.md         → verify file reading
+/plan Fix the bug in app/chat.py    → verify planning
+/tools                 → see all available tools
+/help                  → see all commands
 ```
 
 > 📘 See **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)** for the full guide with example builds, configuration tuning, and architecture deep dives.
@@ -167,7 +183,7 @@ Workflow:
   run_bridge rescan        → Verify: what's fixed, what's new, what remains
 ```
 
-All tools run *outside* the LLM loop — deterministic, zero inference cost. J calls them like any other tool. The suite is pure Python stdlib (~920 lines across 3 files).
+The suite is pure Python stdlib (~920 lines across 3 files). J calls them like any other tool.
 
 ---
 
@@ -190,48 +206,86 @@ J doesn't use a growing conversation that eventually overflows. It reconstructs 
 ## 🏗️ Architecture
 
 ```
-sovereign-shards/
-├── run.py                      # Entry point — args, modes, diagnostics
-├── run-shard.bat               # Windows USB one-click launcher
+sovereign-shards/                     127 files · ~6,500 lines Python
+├── run.py                            # Entry point — args, modes, diagnostics
+├── run-shard.bat                     # Windows USB one-click launcher
+├── setup.bat                         # First-time setup
+├── CONTRIBUTING.md                   # Contributor guide
 ├── app/
-│   ├── chat.py                 # Main chat loop (891 lines)
-│   ├── client.py               # RuntimeConfig — provider-agnostic backend
-│   ├── local_server.py         # llama.cpp server lifecycle management
-│   ├── router.py               # Fast command router (zero inference cost)
-│   ├── doctor.py               # Preflight hardware diagnostics
+│   ├── chat.py                       # Main chat loop (~1,363 lines)
+│   ├── client.py                     # LLM client, stop token handling (~152 lines)
+│   ├── local_server.py               # llama.cpp server lifecycle management
+│   ├── router.py                     # Fast command router (~228 lines, zero inference cost)
+│   ├── ui.py                         # Iron Man terminal UI (341 lines)
+│   ├── config.py                     # Runtime configuration
+│   ├── doctor.py                     # Preflight hardware diagnostics
 │   └── agent/
-│       ├── context.py          # 3-stage context budget gate + step seaming
-│       ├── working_memory.py   # Tier 2: append-only JSONL summaries
-│       ├── memory.py           # Tier 3: persistent key-value store
-│       ├── retriever.py        # BM25 retrieval (~97 lines)
-│       ├── reflection.py       # Weight-triggered memory compression
-│       ├── planner.py          # Task decomposition → DAG
-│       ├── executor.py         # Tool dispatch + result capture
-│       ├── graph.py            # Kahn's algorithm DAG execution
-│       ├── parallel.py         # ThreadPool for independent steps
-│       ├── optimizer.py        # Five Masters code optimizer pipeline
-│       ├── transforms.py       # 8 deterministic AST transforms
-│       ├── sandbox.py          # Pre-push validation gauntlet
-│       ├── tool_registry.py    # Auto-discovery + schema extraction
-│       ├── tool_forge.py       # Runtime tool generation
-│       ├── circuit_breaker.py  # Stuck-loop detection + recovery
-│       └── refactor.py         # Multi-file AST analysis engine
+│       ├── context.py                # 3-stage context budget gate
+│       ├── working_memory.py         # Tier 2: append-only JSONL summaries
+│       ├── memory.py                 # Tier 3: persistent key-value store
+│       ├── retriever.py              # BM25 retrieval (~97 lines)
+│       ├── reflection.py             # Weight-triggered memory compression
+│       ├── task_buffer.py            # Step buffer for plan/execute (~265 lines)
+│       ├── planner.py                # Task decomposition → DAG
+│       ├── executor.py               # Tool dispatch + result capture
+│       ├── graph.py                  # Kahn's algorithm DAG execution
+│       ├── parallel.py               # ThreadPool for independent steps
+│       ├── optimizer.py              # Five Masters code optimizer pipeline
+│       ├── transforms.py             # 8 deterministic AST transforms
+│       ├── sandbox.py                # Pre-push validation gauntlet
+│       ├── tool_registry.py          # Auto-discovery + schema extraction
+│       ├── tool_forge.py             # Runtime tool generation
+│       ├── circuit_breaker.py        # Stuck-loop detection + recovery
+│       └── refactor.py               # Multi-file AST analysis engine
 ├── core/
-│   └── fivemasters.py          # Five Masters AST governance (5 visitors)
+│   └── fivemasters.py                # Five Masters AST governance (5 visitors)
 ├── prompts/
-│   ├── J-system.txt            # System prompt (~130 tokens — lean)
-│   └── J-chat-template.jinja   # ChatML template for llama.cpp
-├── tools/run/                  # 21+ auto-discovered tool scripts (incl. security suite)
-├── tests/                      # 147+ tests (unittest, zero deps)
-├── models/                     # GGUF model files (gitignored)
-├── memory/                     # Runtime memory (gitignored)
+│   ├── J-system.txt                  # System prompt (~130 tokens — lean)
+│   ├── J-chat-template.jinja         # ChatML template for llama.cpp
+│   ├── execute_mode.txt              # Plan execution prompt
+│   └── plan_mode.txt                 # Task decomposition prompt
+├── tools/run/                        # 16+ auto-discovered tool scripts
+│   ├── registry.json                 # Tool definitions
+│   ├── bash.py, read.py, write.py    # Core file/shell tools
+│   ├── search.py, tree.py, exec.py   # Discovery + execution tools
+│   ├── str_replace.py, scaffold.py   # Code editing tools
+│   ├── git.py, sql.py, test.py       # Dev workflow tools
+│   ├── integrity.py                  # SHA-256 hashing
+│   ├── stats.py                      # Codebase statistics (202 lines)
+│   ├── shield.py                     # Shard self-defence (194 lines)
+│   ├── scan.py                       # Host security auditor (~499 lines)
+│   └── bridge.py                     # Remediation generator (252 lines)
+├── tests/                            # 147+ tests (unittest, zero deps)
+│   ├── e2e_runner.py                 # Automated 20-test E2E runner (572 lines)
+│   └── test_*.py                     # Unit tests for every subsystem
+├── models/                           # GGUF model files (gitignored)
+├── memory/                           # Runtime memory (gitignored)
+├── assets/
+│   ├── icon.ico                      # Windows shortcut icon
+│   └── icon.png                      # Project icon
 └── docs/
-    ├── USER_MANUAL.md          # Full user guide
-    ├── ROADMAP.md              # 5-phase roadmap with phase gates
-    ├── MIGRATION_LOG.md        # Architecture + handoff document
-    ├── CODE_OPTIMIZER_SPEC.md  # Optimizer technical specification
-    ├── BUSINESS_MODEL.md       # Three-tier business model
-    └── TEST_PLAN.md            # Test strategy and coverage
+    ├── USER_MANUAL.md                # Full user guide
+    ├── ROADMAP.md                    # 5-phase roadmap with phase gates
+    ├── MIGRATION_LOG.md              # Engineering diary (~1,450 lines)
+    ├── NEXT_10_STEPS.md              # Deterministic next-step plan
+    ├── MARKET_RESEARCH.md            # Competitive landscape analysis
+    ├── TERMINAL_UI_GUIDE.md          # UI customization guide
+    ├── E2E_TEST_BUILD.md             # E2E test specifications
+    ├── CODE_OPTIMIZER_SPEC.md        # Optimizer technical specification
+    ├── RECOMMENDATION_LETTER.md      # Project recommendation letter
+    ├── BUSINESS_MODEL.md             # Three-tier business model
+    └── TEST_PLAN.md                  # Test strategy and coverage
+```
+
+---
+
+## 📊 Project Stats
+
+```
+127 files  ·  ~6,500 lines Python  ·  2 dependencies  ·  16+ tools
+147+ tests  ·  8 AST transforms  ·  5 code quality masters  ·  3-layer defence suite
+23 development sessions  ·  ~1,450-line engineering diary
+Zero network calls  ·  Zero telemetry  ·  100% local  ·  USB-portable
 ```
 
 ---
@@ -270,7 +324,7 @@ Download `.gguf` files from [HuggingFace](https://huggingface.co) and place them
 | Command | What It Does |
 |---------|--------------|
 | `/plan <goal>` | Decompose a goal into a DAG of executable steps |
-| `/optimize <path>` | Run the Five Masters code optimizer (supports `--dry-run`, `--no-model`, `--diff`) |
+| `/optimize <path>` | Run the Five Masters code optimizer (`--dry-run`, `--no-model`, `--diff`) |
 | `/tools` | List all registered tools |
 | `/memory` | Show working + long-term memory stats |
 | `/reflect` | Force memory compression |
@@ -278,32 +332,11 @@ Download `.gguf` files from [HuggingFace](https://huggingface.co) and place them
 | `/model <name>` | Hot-swap the active model mid-session |
 | `/refactor` | Multi-file AST analysis (generates HTML report) |
 | `/integrity` | SHA-256 hash all project files |
-| `run_shield <sub>` | Shard self-defence: `verify`, `baseline`, `autorun`, `wipe <path>` |
-| `run_scan <sub>` | Host security audit: `ports`, `creds`, `security`, `network`, `services`, `permissions`, `full` |
-| `run_bridge <sub>` | Remediation: `report` (markdown), `script` (fix .bat/.sh), `rescan` (before/after) |
-| `run.py --doctor` | Preflight diagnostics (checks model, server, RAM, config) |
+| `run_shield <sub>` | Shard self-defence: `verify`, `baseline`, `autorun`, `wipe` |
+| `run_scan <sub>` | Host security audit: `ports`, `creds`, `security`, `network`, `services`, `full` |
+| `run_bridge <sub>` | Remediation: `report`, `script`, `rescan` |
+| `run.py --doctor` | Preflight diagnostics |
 | `/help` | Show all commands |
-
----
-
-## 📦 Dependencies
-
-```
-python-dotenv
-psutil
-```
-
-Two packages. Everything else is Python standard library. That's a hard constraint.
-
----
-
-## 📊 Project Stats
-
-```
-94 files  ·  66 Python modules  ·  2 dependencies  ·  21+ tools
-147+ tests  ·  8 AST transforms  ·  5 code quality masters  ·  3-layer defence suite
-Zero network calls  ·  Zero telemetry  ·  100% local
-```
 
 ---
 
@@ -311,15 +344,30 @@ Zero network calls  ·  Zero telemetry  ·  100% local
 
 Five phases from prototype to product. Each has a gate — every criterion must pass before moving on.
 
-| Phase | Version | Focus |
-|-------|---------|-------|
-| **1. Stabilize** | v1.0 | Model swap to 7B, boot validation, 20-turn smoke test |
-| **2. Harden** | v1.0.1 | First-run experience, error clarity, 50-turn identity stress test |
-| **3. Optimize** | v1.1 | Multi-file optimizer, model hot-swap, tool forge validation |
-| **4. Extend** | v1.5 | Codebase Forge, voice interface (British English), multi-language AST |
-| **5. Scale** | v2.0 | Plug-and-play shards, multi-shard protocol, enterprise packaging |
+| Phase | Version | Focus | Status |
+|-------|---------|-------|--------|
+| **1. Stabilize** | v1.0 | Model swap to 7B, boot validation, 20-turn smoke test | ✅ CLEARED |
+| **2. Harden** | v1.0.1 | First-run experience, error clarity, 50-turn identity stress test | 🔄 In progress |
+| **3. Optimize** | v1.1 | Multi-file optimizer, model hot-swap, tool forge validation | Planned |
+| **4. Extend** | v1.5 | Codebase Forge, voice interface, multi-language AST | Planned |
+| **5. Scale** | v2.0 | Plug-and-play shards, multi-shard protocol, enterprise packaging | Planned |
 
-> 📋 **[Full roadmap with step-by-step instructions →](docs/ROADMAP.md)**
+> 📋 **[Full roadmap →](docs/ROADMAP.md)** · **[Next 10 steps →](docs/NEXT_10_STEPS.md)**
+
+---
+
+## 📈 Competitive Position
+
+J occupies a unique position in the local AI agent market. No existing product combines autonomous task execution, full offline capability, and USB portability.
+
+| Category | Examples | What They Do | What J Does Different |
+|----------|----------|--------------|----------------------|
+| **Model Runners** | Ollama, LM Studio, GPT4All | Serve and chat with models locally | J uses local models to *plan, execute, and verify* autonomously |
+| **Document Q&A** | PrivateGPT, LocalGPT | Answer questions about documents offline | J writes code, runs tools, and builds projects — not just Q&A |
+| **Cloud Agents** | Claude Code, Codex, Aider | Autonomous coding with frontier models | J does it with zero cloud, zero internet, zero API keys |
+| **IDE Extensions** | Cline, Roo Code, Continue | AI coding inside VS Code | J is standalone — no IDE, no extensions, plug in and go |
+
+> 📊 **[Full market research →](docs/MARKET_RESEARCH.md)**
 
 ---
 
@@ -341,10 +389,50 @@ Five phases from prototype to product. Each has a gate — every criterion must 
 |----------|----------------|
 | [User Manual](docs/USER_MANUAL.md) | Commands, configuration, example workflows |
 | [Roadmap](docs/ROADMAP.md) | 5-phase plan with success criteria and phase gates |
-| [Migration Log](docs/MIGRATION_LOG.md) | Architecture, standards, constraints, known bugs, design rationale |
+| [Next 10 Steps](docs/NEXT_10_STEPS.md) | Deterministic task list for the next developer |
+| [Migration Log](docs/MIGRATION_LOG.md) | Engineering diary — 1,450+ lines, 24 sessions |
+| [Market Research](docs/MARKET_RESEARCH.md) | Competitive landscape and positioning |
+| [Terminal UI Guide](docs/TERMINAL_UI_GUIDE.md) | How to customize the Iron Man terminal UI |
 | [Code Optimizer Spec](docs/CODE_OPTIMIZER_SPEC.md) | Five Masters optimizer technical specification |
+| [E2E Test Build](docs/E2E_TEST_BUILD.md) | End-to-end test specifications and runner |
+| [Contributing](CONTRIBUTING.md) | Architecture principles, code style, how to contribute |
 | [Test Plan](docs/TEST_PLAN.md) | Test strategy, coverage map, how to run |
 | [Business Model](docs/BUSINESS_MODEL.md) | Three-tier pricing and distribution strategy |
+
+---
+
+## 📦 Dependencies
+
+```
+python-dotenv
+psutil
+```
+
+Two packages. Everything else is Python standard library. That's a hard constraint — not a preference.
+
+---
+
+## 🧪 Testing
+
+```bash
+# Unit tests (147+, zero external deps)
+python -m pytest tests/
+
+# E2E test suite (20 tests, requires running server)
+python tests/e2e_runner.py
+
+# Quick smoke test (manual)
+# Boot J → "hey J" → "ls ." → "read README.md" → verify all work
+```
+
+### Phase Gate History
+
+| Test | Score | Status |
+|------|-------|--------|
+| Smoke L1–L5 | 5/5 | ✅ ALL PASS |
+| Speed-run v3 | 5/5 | ✅ ALL PASS |
+| Endurance v3 (20 turns) | 17.5/20 | ✅ PASS |
+| Mach 1 flight (live bugs) | 4/4 | ✅ ALL PASS |
 
 ---
 
