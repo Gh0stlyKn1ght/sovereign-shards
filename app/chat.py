@@ -846,12 +846,12 @@ def _run_buffer_plan(
             {"role": _system_role(client), "content": SYSTEM_PROMPT},
         ]
 
-        # Add the step prompt with execute prefix
+        # Build the step prompt (DO NOT append here — _run_turn appends it)
         step_content = task_buffer.step_prompt(step)
         full_prompt = f"{exec_prefix}\n\n{step_content}"
-        step_messages.append({"role": "user", "content": full_prompt})
 
         # Run the step through the normal turn machinery
+        print(f"[EXEC] step={step_id}  tool_budget=2")
         print(ui.j_prefix(), end="", flush=True)
         try:
             step_reply = _run_turn(
