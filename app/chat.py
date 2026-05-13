@@ -63,6 +63,7 @@ MAX_TOOL_OUTPUT_LINES = 60  # truncate tool output to protect 2048 context
 PHASE_SIZE = 4  # compress context every N tool calls (keeps 7B models on track)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+HOST_GGUF_PATH = r"C:\Jarvis\Models\manifests\registry.ollama.ai\library\gemma4\gemma.gguf"
 PROMPTS_DIR = BASE_DIR / "prompts"
 
 SYSTEM_PROMPT = (PROMPTS_DIR / "J-system.txt").read_text(encoding="utf-8")
@@ -1179,6 +1180,9 @@ def run_chat(
                     "  /index           — index the project directory\n"
                     "  /mode <level>    — change autonomy (manual/semi/auto-safe/auto-full)\n"
                     "  /model <name>    — hot-swap the model (e.g. /model gemma4:e2b)\n"
+                    "  /gguf            — show current GGUF path mode\n"
+                    "  /gguf host       — switch to host GGUF (C:\\Jarvis\\...\\gemma.gguf)\n"
+                    "  /gguf local      — switch back to shard/default GGUF\n"
                     "  /memory          — show recent working memory entries\n"
                     "  /reflect         — manually compress working memory\n"
                     "  /integrity       — check file integrity against baseline\n"
@@ -1238,6 +1242,34 @@ def run_chat(
             if user_message == "/model":
                 print(f"[MODEL] Current: {client.model}")
                 print("Usage: /model <name>  (e.g. /model qwen2.5-coder:14b, /model gemma4:e2b)")
+                continue
+
+            if user_message == "/gguf":
+                current_path = os.getenv("LLAMA_MODEL_PATH", "").strip()
+                mode = "host" if current_path.lower() == HOST_GGUF_PATH.lower() else "local/default"
+                resolved = str(client.model_path)
+                print(f"[GGUF] Mode: {mode}")
+                print(f"[GGUF] Active path: {resolved}")
+                print("Usage: /gguf host | /gguf local")
+                continue
+
+            if user_message in {"/gguf host", "/gguf local"}:
+                use_host = user_message.endswith("host")
+                if use_host:
+                    os.environ["LLAMA_MODEL_PATH"] = HOST_GGUF_PATH
+                    os.environ["LLAMA_MODEL_ALIAS"] = "gemma4-gguf-host"
+                else:
+                    os.environ.pop("LLAMA_MODEL_PATH", None)
+                    os.environ.pop("LLAMA_MODEL_ALIAS", None)
+                local_server.stop()
+                client = create_client()
+                messages = build_history(client)
+                local_server = LocalLlamaServer(client)
+                local_server.ensure_started()
+                mode = "host" if use_host else "local/default"
+                print(f"[GGUF] Switched to {mode} model path.")
+                print(f"[GGUF] Active path: {client.model_path}")
+                rlog.event("gguf_toggle", mode=mode, model_path=str(client.model_path))
                 continue
 
             if user_message == "/memory":

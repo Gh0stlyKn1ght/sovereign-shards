@@ -63,6 +63,9 @@ quit / exit      — End session
 /model <name>    — Hot-swap model (e.g. /model qwen2.5-coder:14b)
 /mode <level>    — Change autonomy (manual/semi/auto-safe/auto-full)
 /memory          — Show working memory
+/gguf            — Show active GGUF path mode
+/gguf host       — Switch to host GGUF (C:\Jarvis\...\gemma.gguf)
+/gguf local      — Switch back to shard/default GGUF
 /reflect         — Manually compress working memory
 /integrity       — Check file integrity
 /refactor        — Cross-file AST analysis
