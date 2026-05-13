@@ -3,8 +3,8 @@
 > For the next agent, developer, or collaborator picking up this project.
 > Read this entire document before writing a single line of code.
 
-**Last updated:** 2026-05-10 (Session 19)
-**Current agent:** Viktor (getviktor.com) — PRs #16–#32 (Session 18), direct pushes (Session 19). ~90+ total commits on main.
+**Last updated:** 2026-05-13 (Session 27)
+**Current agent:** Viktor (getviktor.com) — PRs #16–#32 (Session 18), direct pushes (Sessions 19–27). 192 total commits on main.
 **Repo:** github.com/s4ndm4n33-spec/sovereign-shards
 **Branch:** `main` (active development branch).
 
@@ -1610,3 +1610,197 @@ pi * 5 squared        → 78.54   ✓
   calculators or eval() with sanitisation, it's impossible to inject
   code — the walker only recognises numeric constants, operators, and
   whitelisted function/constant names.
+
+
+## Session 26 — Personality Layer
+
+**Date:** 2026-05-12
+**Author:** Viktor (AI coworker)
+**Commit:** `e2ef722`
+**Focus:** Give J a consistent voice — calm, precise, sardonic. Every terminal message sounds like J, not like a chatbot.
+
+### Problem
+
+All terminal output (startup messages, step completions, circuit breaker warnings, etc.) was generic system text. J had no personality in the framework layer — only whatever the LLM produced during inference. The result was a schizophrenic experience: J might sound one way during chat, another way during tool execution, and completely robotic during system events.
+
+### Solution: `app/personality.py` — Scripted Personality Layer
+
+New module: 524 lines, 35+ functions, each with 3-5 randomized variants. Zero inference cost — all personality comes from pre-written pools of in-character responses.
+
+**Voice rules:** Calm. Precise. Sardonic. Dry wit. Never sycophantic.
+
+**Coverage:**
+- Startup/shutdown: `ready()`, `shutdown(transcript_path)`
+- Planning: `planning_start()`, `plan_parsed()`, `plan_complete()`, `plan_fallback()`
+- Step execution: `step_start()`, `step_done()`, `step_failed()`, `exec_status()`
+- Tool budget: `tool_budget_spent()`, `tool_budget_status()`, `tool_budget_exhausted()`
+- Tool confirmations: `tool_confirm()`, `tool_blocked()`
+- Circuit breaker (all 4 types): `breaker_budget_exceeded()`, `breaker_step_stuck()`, `breaker_repeat_call()`, `breaker_repeat_error()`
+- Memory: `reflect_start()`, `reflect_done()`, `reflect_failed()`
+- Doctor checks: `doctor_pass()`, `doctor_fail()`, `doctor_summary_healthy()`
+- Diagnostics: `language_drift()`, `empty_system_prompt()`, `mode_changed()`
+- Persona bleed: `strip_bleed()` — regex that catches "As a helpful..." / "Sure, I'd be happy to..." hallucinated preambles
+
+**Wired into:**
+- `chat.py` — 30+ replacements of hardcoded strings
+- `ui.py` — boot banner + shutdown message
+- `circuit_breaker.py` — all 4 trip types
+
+### Files Changed
+
+| File | Action | Lines |
+|------|--------|-------|
+| `app/personality.py` | NEW | 524 |
+| `app/chat.py` | UPDATED | ~30 string replacements |
+| `app/ui.py` | UPDATED | banner + shutdown |
+| `app/agent/circuit_breaker.py` | UPDATED | trip messages |
+
+
+## Session 27 — Multi-Step Execution: The Complete Fix
+
+**Date:** 2026-05-12 – 2026-05-13
+**Author:** Viktor (AI coworker)
+**Commits:** `1b71bad` through `2db8a24` (14 commits)
+**Focus:** Make J reliably complete multi-step tool pipelines (5-25 calls) without looping, crashing, or forgetting what it already did.
+
+### The Core Problem
+
+J could not complete a 22-step task (building `docs/TOOL_REFERENCE.md`). It would:
+1. Read a file, then read it again (duplicate calls)
+2. Lose context after phase compression (forgot what searches returned)
+3. Crash on regex args containing `[^"]+` (broke JSON parser)
+4. Get killed by the circuit breaker at step 12 even on budget-25 tasks
+5. Drift away from the original task after 4-5 tool calls
+
+No single fix would solve this. It required five interlocking systems.
+
+### Fix 1 — Dedup Guard (`38c7e96`)
+
+**Layer:** Pre-execution gate in `_run_turn()`.
+**Mechanism:** Before ANY tool call executes, checks `turn_tool_log` for an exact match on `{tool_name} {args}`. If duplicate:
+- Skip execution entirely (no budget cost)
+- Inject redirect message: lists all completed calls, tells J to pick a DIFFERENT file or tool
+- User sees personality-voiced message: "Déjà vu. Already done. Next."
+
+### Fix 2 — Breaker Scaling (`0d4e414`)
+
+**Layer:** `CircuitBreaker.__init__` accepts `tool_budget`.
+**Mechanism:** `max_step_turns = max(12, tool_budget + 10)`.
+- Budget=3 (default): max 12 turns (unchanged)
+- Budget=25 (heavy pipeline): max 35 turns
+- Prevents premature breaker trips on legitimately long tasks
+
+### Fix 3 — Action Parser Regex Rescue (`d4a4030`)
+
+**Layer:** Step 2 in `_extract_action()`.
+**Problem:** J's 7B model generates valid-looking ACTION JSON with unescaped regex:
+```
+ACTION: {"tool": "run_search", "args": ["[^"]+", "tools/run"]}
+```
+This breaks `json.loads()` and `ast.literal_eval()` — the quotes inside the regex are indistinguishable from JSON delimiters.
+
+**Fix:** After JSON parsing fails, a regex rescue step:
+1. Extracts tool name via `r'"tool"\s*:\s*"([^"]+)"'`
+2. Finds the last simple quoted argument (usually a file path)
+3. Reconstructs the first argument from the remainder
+4. Returns a valid action dict
+
+### Fix 4 — Phase Digest (`fee158b`)
+
+**Layer:** Context reconstruction after phase compression.
+**Problem:** Phase compression clears verbose tool outputs every 4 calls to free context. But after clearing, J has no idea what those calls returned — only that they were called. So it calls them again.
+
+**Fix:** `turn_tool_digests` list captures a 3-line preview (~200 chars) of each tool's output. Phase compression summary now includes "What you've gathered so far:" with these digests. J reads: "run_search found 17 tool names in registry.json" — and knows not to search again.
+
+### Fix 5 — Tool Narration (`2db8a24`)
+
+**Layer:** User-facing output in console + transcript.
+**Problem:** Tool execution displayed raw JSON dumps:
+```
+[TOOL EXECUTION]
+tool: run_tree
+args: ['tools/run']
+result:
+{"ok": true, "output": "run/\n├── bash.py  (1KB)\n..."}
+```
+Continuation prompts exposed system internals in the transcript. Reads like machine logs, not J.
+
+**Fix:**
+- `personality.py` gains `tool_narrate()` with 17 tool verb maps (Scanning, Pulling up, Hunting through, Crunching, Patching, etc.) and `_summarize_output()` for a one-line result summary.
+- User/transcript sees: `⚡ Scanning tools/run... ✓ 18 lines`
+- Model still receives full structured `[TOOL EXECUTION]` data internally.
+- Continuation prompts logged as `[3/25 tools used]` instead of full system text.
+- Dedup skips narrated: `⚡ Déjà vu. run_read tools/run/bash.py already done. Next.`
+
+### Additional Fixes in This Session
+
+| Commit | Fix |
+|--------|-----|
+| `1b71bad` | Route `initial_message` through fast router + strip persona bleed (3 bugs) |
+| `cd2b3ca` | Quick-build guard: don't scaffold multi-step instructions |
+| `2299994` | `run_tree --depth` optional + budget uncapped for heavy pipelines |
+| `330e245` | `tree.py` Windows Unicode crash + `list_dir` returns full paths |
+| `baf94b9` | Breadcrumb trail prevents J from re-reading files |
+| `fde66d5` | Anchor continuation prompt to original task instruction |
+| `6a7cbcd` | Complete `docs/TOOL_REFERENCE.md` (401 lines, all 17 tools) |
+| `a4d456e` | Phase-based context chunking (PHASE_SIZE=4, compress every 4 calls) |
+| `e2ef722` | Personality layer (Session 26, above) |
+
+### Simulation Results — All Fixes Combined
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Total tool executions | 12 (6 duplicates) | 6 unique |
+| Duplicate calls caught | 0 | 6 (all blocked) |
+| Budget remaining | 0 (breaker killed) | 19 of 25 |
+| Breaker trips | 1 (step_turns=12) | 0 |
+| Parse failures | 1 (regex JSON) | 0 (rescue succeeded) |
+| Context loss after phase | Yes | No (digest preserved) |
+
+### Architecture After Session 27
+
+**Tool execution pipeline (per call):**
+```
+Model outputs ACTION → _extract_action() (JSON + regex rescue)
+    → validate_action_payload() (schema check)
+    → dedup check (turn_tool_log)
+    → circuit breaker check (4 trip types, scaled limits)
+    → side-effect approval (if applicable)
+    → _execute_tool()
+    → persona.tool_narrate() (user display)
+    → phase compression check (every PHASE_SIZE calls)
+    → breadcrumb + continuation prompt → next model call
+```
+
+**Constants (current):**
+```
+MAX_TOOL_BUDGET    = 3   (default for normal queries)
+PHASE_SIZE         = 4   (compress context every 4 calls)
+RETRY_MARGIN       = 5   (extra hops beyond budget for retries)
+MAX_REPEAT_CALLS   = 3   (breaker: same call 3x → trip)
+MAX_REPEAT_ERRORS  = 3   (breaker: same error 3x → trip)
+MAX_STEP_TURNS     = max(12, budget + 10)  (scaled)
+MAX_TOTAL_TURNS    = 60  (hard ceiling)
+MAX_TOOL_OUTPUT_LINES = 60  (truncate long outputs)
+```
+
+### What Remains
+
+1. **ACTION line suppression** — model still streams raw `ACTION: {json}` to console. Suppressing requires stream buffering (complex). Deferred — narration line after is the current compromise.
+2. **Planning layer** — explicit task decomposition before the tool loop (planning prompt → step list → execute each). Would help on 10+ step tasks. Discussed, deferred.
+3. **Real-world validation** — simulation says it works. Need Mike to `git pull` and run the full stack with all fixes combined.
+
+### Files Changed
+
+| File | Action | Lines Changed |
+|------|--------|---------------|
+| `app/chat.py` | UPDATED | +235 (dedup, phase, digest, narration, breadcrumbs) |
+| `app/personality.py` | UPDATED | +75 (tool_narrate, tool_narrate_dedup) |
+| `app/agent/circuit_breaker.py` | UPDATED | +27 (budget scaling) |
+| `app/router.py` | UPDATED | +17 (quick-build guard, initial_message fix) |
+| `app/file_tools.py` | UPDATED | +5 (tree.py full paths) |
+| `app/ui.py` | UPDATED | +12 (personality wiring) |
+| `docs/TOOL_REFERENCE.md` | NEW | 401 (complete tool reference) |
+| `tools/run/tree.py` | UPDATED | +7 (Unicode fix, optional depth) |
+| `tools/run/registry.json` | UPDATED | +20 (tool entries) |
+| `tests/e2e_runner.py` | UPDATED | +8 (Windows path fix) |

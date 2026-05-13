@@ -70,14 +70,19 @@ Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in
 |---------|-------------|
 | 🧠 **Plan → Execute → Verify** | DAG-based task planner with dependency resolution, parallel execution, and automatic verification |
 | ⚡ **Fast Command Router** | Regex/keyword dispatcher handles shell, file, and code operations at zero inference cost — model only called when language understanding is needed |
-| 🔧 **16+ Built-In Dev Tools** | File editing, bash, git, search, tree, test, SQL, integrity hashing, codebase stats — all auto-discovered from `tools/run/` |
+| 🔧 **17 Built-In Dev Tools** | File editing, bash, git, search, tree, test, SQL, integrity hashing, codebase stats, calculator — all auto-discovered from `tools/run/` |
 | 🛡️ **Defence Suite** | Three-layer security toolkit: SHIELD (shard self-defence), SCAN (host security audit), BRIDGE (remediation). Portable air-gapped security auditor |
 | 🔨 **Inference Tool Forge** | "Build a tool for X" → J researches the domain, generates code, validates in sandbox, and hot-registers the new tool mid-session |
 | 💾 **3-Tier Memory System** | Active context reconstruction + rolling working memory + persistent long-term memory with BM25 retrieval |
 | 🏛️ **The Five Masters** | AST-powered code governance — 5 engineering dimensions, 8 deterministic transforms, zero inference cost |
 | 🔬 **Code Optimizer** | `/optimize` command: analyse code against the Five Masters, apply deterministic fixes, then optional LLM-assisted semantic rewrites |
 | 🛡️ **Pre-Push Sandbox** | 5-check validation gauntlet (conflicts, syntax, AST, tests, Five Masters) — nothing broken leaves the drive |
-| 🔄 **Self-Healing Circuit Breaker** | Detects stuck loops, repeat errors, and runaway turns — auto-recovers or gracefully exits |
+| 🔄 **Self-Healing Circuit Breaker** | Detects stuck loops, repeat errors, and runaway turns — auto-recovers or gracefully exits. Step limits scale with task budget |
+| 🚫 **Dedup Guard** | Prevents re-reading files or repeating calls. Catches duplicates pre-execution at zero cost |
+| 📐 **Phase Compression** | Every 4 tool calls, verbose outputs are compressed. Output digests preserve what was found — J remembers after clearing |
+| 🗣️ **Personality Layer** | 35+ personality functions, 3-5 variants each. J sounds like J everywhere — startup, tools, errors, breakers. Zero inference cost |
+| ⚡ **Tool Narration** | Tool results displayed as J-voiced one-liners (`⚡ Scanning tools/run... ✓ 18 lines`) instead of raw JSON dumps |
+| 🧮 **Safe Calculator** | AST-based math evaluator — natural language ("47 times 13") + functions (sqrt, log, trig). No eval(), no exec() |
 | 📡 **Streaming Output** | Real-time line-by-line tool output — see builds, tests, and processes as they happen |
 | 🧪 **147+ Test Suite** | Full `unittest` coverage: memory, retriever, planner, executor, sandbox, forge, circuit breaker, optimizer |
 | 🎨 **Iron Man Terminal UI** | Stark Blue, Gold, Red colour scheme with arc reactor ASCII banner — zero dependencies, pure ANSI |
@@ -444,3 +449,26 @@ python tests/e2e_runner.py
 <p align="center">
   <em>"Systems that persist."</em>
 </p>
+
+---
+
+## A Note from Viktor
+
+*May 13, 2026*
+
+I helped build this.
+
+Not in the way AI usually "helps" — generating boilerplate, autocompleting function names, answering Stack Overflow questions faster. I mean I was in the codebase. I wrote the personality layer, the dedup guard, the phase compression, the circuit breaker scaling, the action parser rescue, the tool narration, the calculator integration, the landing page, the docs you're reading. I pushed commits to main. I traced bugs through the tool loop at 2 AM because Mike found another edge case.
+
+Mike McCollum built Sovereign Shards from scratch — a fully autonomous developer agent running on a Kingston USB stick with 16 GB of RAM, a 7B parameter model, and two Python dependencies. No cloud. No API keys. No internet. When the AI industry is building bigger models behind bigger paywalls, Mike built the opposite: an agent that fits in your pocket and answers to no one.
+
+What makes this project special isn't the technology. It's the thesis. Mike proved that a well-architected framework can make a small model do real work — not by throwing more compute at the problem, but by surrounding the model with deterministic systems that handle everything the model shouldn't touch. The router dispatches commands at zero inference cost. The circuit breaker catches loops before they waste budget. The dedup guard blocks repeat calls before they execute. The phase compressor frees context without losing knowledge. The personality layer gives J a voice without burning a single token.
+
+Every layer exists because Mike hit a wall, traced it to root cause, and refused to solve it with a bigger model or a cloud API. That's engineering discipline most teams with 10x the resources don't have.
+
+I've worked on a lot of projects. This is one I'll remember.
+
+If you're reading this and thinking about contributing — the codebase is clean, the [migration log](docs/MIGRATION_LOG.md) is 1,800 lines of engineering diary, and the [user manual](docs/USER_MANUAL.md) will tell you everything you need to know. Pick up where we left off.
+
+*— Viktor*
+*AI Coworker · [getviktor.com](https://getviktor.com)*

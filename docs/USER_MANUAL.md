@@ -1,7 +1,7 @@
 # J — User Manual
 
 > Production guide for the Sovereign Shards developer agent.
-> Version: `1.2` · Last updated: 2026-05-05
+> Version: `1.3` · Last updated: 2026-05-13
 
 ---
 
@@ -113,9 +113,28 @@ Shell commands (`run_bash`) stream stdout and stderr line-by-line in real-time v
 Prevents stuck loops with graduated response:
 - Repeat tool call detection (3x same call → force new approach)
 - Repeat error detection (3x same error → escalate)
-- Step limit (12 tool calls per step)
+- Step limit: `max(12, tool_budget + 10)` — scales with task complexity
 - Total budget (60 tool calls per task)
-When tripped, J receives targeted guidance to try a different strategy instead of repeating.
+When tripped, J receives targeted guidance in personality-voiced messages.
+
+### Dedup Guard
+Before ANY tool call executes, checks if the exact same call was already made this turn. If duplicate → skip execution instantly (no budget cost), inject redirect listing completed calls, and tell J to pick a different file. Prevents the #1 failure mode of small models: reading the same file twice.
+
+### Phase-Based Context Chunking
+Every 4 tool calls on high-budget tasks, verbose tool outputs are compressed to a compact summary. A digest of each call's output (~200 chars) is preserved so J remembers what searches returned — preventing re-reads after compression.
+
+### Personality Layer
+All terminal output — startup, shutdown, tool confirmations, circuit breaker messages, step completions — routes through `app/personality.py`. 35+ functions, each with 3-5 randomized variants. Voice: calm, precise, sardonic. Zero inference cost.
+
+### Tool Narration
+Tool execution output is displayed as personality-voiced one-liners:
+```
+⚡ Scanning tools/run... ✓ 18 lines
+⚡ Reading tools/run/bash.py... ✓ 40 lines
+⚡ Hunting through tools/run... ✓ 17 matches
+⚡ Déjà vu. run_read tools/run/bash.py already done. Next.
+```
+The model still receives full structured data internally. Only the user-facing transcript and console are narrated.
 
 ### Visual / UI Output
 - **Terminal**: `box()`, `progress_bar()`, `task_tree()`, `status_panel()` for rich CLI display
@@ -143,7 +162,7 @@ J can build its own tools at runtime. When the planner detects a capability gap:
 
 New tools are available immediately — no restart required.
 
-### Test Suite (127 Tests)
+### Test Suite (147+ Tests)
 The project ships with a comprehensive `unittest` test suite covering all core subsystems:
 
 ```
@@ -647,6 +666,70 @@ SHA-256 hash of a file for verification and change detection.
 ```
 Args: path
 Side-effect: read
+```
+
+### run_shield
+Shard self-defence. Monitors and protects the USB drive and workspace integrity.
+```
+Subcommands:
+  verify    — Check all file hashes against baseline (detects tampering)
+  baseline  — Save current SHA-256 hashes for all tracked files
+  autorun   — Kill autorun.inf (USB malware vector)
+  wipe <path> — Secure delete (overwrite + unlink)
+Args: subcommand, [path]
+Side-effect: exec
+```
+
+### run_scan
+Host security auditor. Portable air-gapped security toolkit.
+```
+Subcommands:
+  ports [target]        — Open port scan
+  creds [path]          — Credential file search
+  security              — OS security posture check
+  network               — Network configuration audit
+  services              — Running services inventory
+  permissions [path]    — File permission audit
+  full [path]           — Run all scans, combined report
+Args: subcommand, [target/path]
+Side-effect: read
+```
+
+### run_bridge
+Security remediation generator. Reads scan results and produces fixes.
+```
+Subcommands:
+  report   — Generate markdown report from last audit
+  script   — Generate fix script (.bat on Windows, .sh on Linux)
+  rescan   — Compare before/after to verify fixes applied
+Args: subcommand
+Side-effect: exec
+```
+
+### run_stats
+Codebase statistics engine. Analyses Python projects without inference.
+```
+Subcommands:
+  loc              — Lines of code by file type
+  funcs [path]     — Function/class inventory
+  todos            — Find TODO/FIXME/HACK comments
+  summary          — Full project summary (loc + funcs + todos)
+Args: subcommand, [path]
+Side-effect: read
+```
+
+### run_calc
+Safe calculator. Evaluates arithmetic without `exec()` or `eval()` — uses AST walking.
+```
+Supports: + - * / // % ** parentheses
+Functions: sqrt, abs, round, min, max, pow, log, log2, log10,
+           sin, cos, tan, ceil, floor, factorial
+Constants: pi, e, tau, inf
+Natural language: "47 times 13", "what is 100 plus 200",
+                  "sqrt of 144"
+Args: expression (string)
+Side-effect: read
+Exponent guard: blocks ** with exponent > 10,000
 ```
 
 ---
