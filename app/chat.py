@@ -440,7 +440,7 @@ def _run_turn(
     rlog.event("stage_start", stage="tool_loop")
 
     # Bounded tool loop with circuit breaker
-    breaker = CircuitBreaker()
+    breaker = CircuitBreaker(tool_budget=tool_budget)
     action_retries = 0
     last_tool_error: str | None = None
     turn_tool_calls = 0  # per-turn counter (not cumulative across turns)

@@ -52,8 +52,10 @@ class BreakerState:
 class CircuitBreaker:
     """Monitor agent loop for stuck patterns and inject recovery."""
 
-    def __init__(self) -> None:
+    def __init__(self, tool_budget: int = 3) -> None:
         self.state = BreakerState()
+        # Scale step limit with budget so heavy pipelines aren't killed early
+        self.max_step_turns = max(MAX_STEP_TURNS, tool_budget + 10)
 
     def reset_step(self) -> None:
         """Call at the start of each new step."""
@@ -86,8 +88,8 @@ class CircuitBreaker:
             return self._trip("budget_exceeded",
                 persona.breaker_budget_exceeded(self.state.total_turns, MAX_TOTAL_TURNS))
 
-        # 2. Step turn limit
-        if self.state.step_turns >= MAX_STEP_TURNS:
+        # 2. Step turn limit (scales with tool_budget via __init__)
+        if self.state.step_turns >= self.max_step_turns:
             return self._trip("step_stuck",
                 persona.breaker_step_stuck(self.state.step_turns))
 
