@@ -552,7 +552,7 @@ def _run_turn(
                 f"Completed so far:\n{done_list}\n"
                 "Pick a DIFFERENT file or tool you have NOT used yet."
             )
-            print(f"\n🔁 Dedup skip: {current_call_sig}")
+            print(f"\n{persona.tool_narrate_dedup(current_call_sig)}")
             messages.append({"role": "user", "content": skip_msg})
             logger.append("system", skip_msg)
             breaker.record_turn(
@@ -591,9 +591,13 @@ def _run_turn(
             f"args: {action.get('args', [])}\n"
             f"result:\n{tool_result}"
         )
-        print(f"\n{tool_response}\n")
+        # User/transcript sees personality-voiced narration
+        narration = persona.tool_narrate(tool_name, action.get("args", []), tool_result, is_error)
+        print(f"\n{narration}\n")
+        # Model gets the structured data (needs it for reasoning)
         messages.append({"role": assistant_role, "content": tool_response})
-        logger.append("assistant", tool_response)
+        # Transcript gets narration (clean read); raw data stays in rlog
+        logger.append("assistant", narration)
         action_retries = 0
 
         # ── Tool budget tracking (per-turn, not cumulative) ─────────
@@ -644,7 +648,8 @@ def _run_turn(
             )
 
         messages.append({"role": "user", "content": continuation})
-        logger.append("user", continuation)
+        # Log concise status (not the full system continuation prompt)
+        logger.append("system", f"[{turn_tool_calls}/{tool_budget} tools used]")
 
         # ── Phase break: compress context at phase boundaries ──────
         # Every PHASE_SIZE calls on high-budget tasks, replace verbose

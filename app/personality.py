@@ -191,6 +191,81 @@ def tool_budget_exhausted() -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  TOOL NARRATION — what the USER sees during tool execution
+# ═══════════════════════════════════════════════════════════════════
+
+# Map tool names to action verbs for narration
+_TOOL_VERBS: dict[str, list[str]] = {
+    "run_tree":         ["Mapping out", "Scanning", "Charting"],
+    "run_read":         ["Reading", "Pulling up", "Opening"],
+    "run_write":        ["Writing", "Saving", "Laying down"],
+    "run_search":       ["Searching", "Hunting through", "Scanning"],
+    "run_bash":         ["Running command in", "Executing in"],
+    "run_exec":         ["Running code", "Executing"],
+    "run_git":          ["Checking git", "Pulling git info on"],
+    "run_test":         ["Running tests on", "Testing"],
+    "run_str_replace":  ["Patching", "Editing", "Splicing"],
+    "run_scaffold":     ["Scaffolding", "Setting up"],
+    "run_sql":          ["Querying", "Running SQL on"],
+    "run_calc":         ["Crunching", "Calculating"],
+    "run_stats":        ["Analyzing", "Gathering stats on"],
+    "run_integrity":    ["Checking integrity of", "Verifying"],
+    "run_shield":       ["Running shield on", "Securing"],
+    "run_scan":         ["Auditing", "Scanning security on"],
+    "run_bridge":       ["Generating remediation for"],
+}
+
+def _summarize_output(output: str) -> str:
+    """Extract a one-line summary from tool output."""
+    lines = output.strip().split("\n")
+    # Count meaningful result lines
+    count = len([l for l in lines if l.strip() and not l.startswith("{")])
+    if count == 0:
+        return ""
+    if count == 1:
+        # Single-line result — show it (truncated)
+        return lines[0].strip()[:80]
+    return f"{count} lines"
+
+
+def tool_narrate(tool_name: str, args: list, output: str, is_error: bool) -> str:
+    """User-facing one-liner for a tool execution.
+
+    Returns a J-voiced narration like:
+        ⚡ Scanning tools/run... ✓ 17 files
+        ⚡ Reading tools/run/bash.py... ✓ 40 lines
+        ⚡ Searching for "name" in tools/run... ✓ 17 matches
+    """
+    verbs = _TOOL_VERBS.get(tool_name, ["Using"])
+    verb = random.choice(verbs)
+    target = " ".join(str(a) for a in args)[:60] if args else ""
+    summary = _summarize_output(output)
+
+    if is_error:
+        return _pick(
+            f"⚡ {verb} {target}... ✗ Hit a wall.",
+            f"⚡ {verb} {target}... ✗ That didn't work.",
+            f"⚡ {verb} {target}... ✗ Error. Adjusting.",
+        )
+
+    if summary:
+        return _pick(
+            f"⚡ {verb} {target}... ✓ {summary}",
+            f"⚡ {verb} {target} — {summary}",
+        )
+    return f"⚡ {verb} {target}... ✓ Done."
+
+
+def tool_narrate_dedup(call_sig: str) -> str:
+    """User-facing message when a duplicate call is skipped."""
+    return _pick(
+        f"⚡ Already did that ({call_sig}). Moving on.",
+        f"⚡ Skip — {call_sig} already done.",
+        f"⚡ Déjà vu. {call_sig} is cached. Next.",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  VERIFICATION
 # ═══════════════════════════════════════════════════════════════════
 
