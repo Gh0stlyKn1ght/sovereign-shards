@@ -548,6 +548,7 @@ def _run_turn(
 
         tool_name = action.get("tool", "")
         tool_args = str(action.get("args", []))
+        effect = registry.get_side_effect(tool_name)
         # Pre-compute call signature for dedup + breadcrumbs
         call_args_str = " ".join(str(a) for a in action.get("args", []))
         current_call_sig = f"{tool_name} {call_args_str}".strip()
