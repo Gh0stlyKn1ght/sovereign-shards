@@ -1,6 +1,6 @@
 {
   "project": "sovereign-shards",
-  "generated_at": "2026-05-13",
+  "generated_at": "2026-05-14",
   "purpose": "Portable migration log for recreating and auditing the ToolRegistry + chat-loop integration in another environment.",
   "source_branch": "main",
   "milestones": [
@@ -208,7 +208,7 @@
       ]
     },
     {
-      "id": "M8",
+      "id": "M10",
       "title": "Personality layer",
       "summary": "Scripted personality module (524 lines, 35+ functions). All terminal output sounds like J. Zero inference cost.",
       "files": [
@@ -221,7 +221,7 @@
       "session": 26
     },
     {
-      "id": "M9",
+      "id": "M11",
       "title": "Multi-step execution: complete fix",
       "summary": "Five interlocking systems for reliable 25-call pipelines: dedup guard, breaker scaling, regex-rescue parser, phase digest, tool narration. 14 commits.",
       "files": [
@@ -237,7 +237,7 @@
       "session": 27
     },
     {
-      "id": "M10",
+      "id": "M12",
       "title": "Phase-compression continuity anchor for serial reads",
       "summary": "Added explicit unread-file checklist tracking for prompts that ask to read each Python file in a directory, then reinjected the unresolved checklist in phase summaries to keep long tool runs on-task.",
       "files": [
@@ -253,6 +253,92 @@
         "Append unresolved checklist to phase compression summary prompt"
       ],
       "session": 28
+    },
+    {
+      "id": "M13",
+      "title": "Context persistence, dedup hardening, and reflection batching",
+      "summary": "Two Codex PRs (#41, #42) landed bug-fixes from live debug sessions. Persistent scratch pad saves key tool facts to disk so agent can recall data after context trimming. Accumulator writes intermediate results for large reads. Reflection batching with deterministic fallback prevents runaway compression prompts. Dedup cache returns cached outputs for exact repeated tool calls (read-effect only). Identity-preamble stripping removes persona bleed before action parsing. Working memory hygiene strips identity bleed on append. Circuit breaker scale formula adjusted. MAX_TOOL_BUDGET raised to 6 then reverted in M14.",
+      "files": [
+        "app/chat.py",
+        "app/agent/context.py",
+        "app/agent/executor.py",
+        "app/agent/reflection.py",
+        "app/agent/working_memory.py",
+        "app/agent/circuit_breaker.py",
+        "tools/run/write.py"
+      ],
+      "actions": [
+        "Add _extract_middle_tool_facts to persist tool outputs to memory/scratch_pad.jsonl",
+        "Add scratch-pad reminder system message when context is trimmed",
+        "Add _maybe_append_accumulator for large read operations to memory/task_accumulator.md",
+        "Implement compress_entries and rule_based_compress in reflection.py with batching and truncation",
+        "Add DEDUP_CACHE in chat.py returning cached outputs for exact call signatures",
+        "Add _strip_identity_preamble to remove persona preambles before action parsing",
+        "Add strip_identity_bleed to working_memory.py append path",
+        "Append 'I am J' to stop tokens for llama_cpp",
+        "Adjust circuit breaker scale formula",
+        "Allow tools/run/write.py to accept data via argv[2] or stdin"
+      ],
+      "compatibility_notes": [
+        "Scratch pad and accumulator are additive \u2014 no existing behavior changed.",
+        "Dedup cache is gated on effect=='read'; write/exec tools always execute.",
+        "Identity stripping is regex-based and harmless if no preamble is present."
+      ],
+      "prs": [
+        41,
+        42
+      ],
+      "session": 29
+    },
+    {
+      "id": "M14",
+      "title": "Chain checkpoint/resume for multi-tool execution",
+      "summary": "The core tool-call chaining method. When J exhausts its 3-call budget mid-task, _run_turn writes a .j_chain.json checkpoint with completed steps, key facts, and next steps. On the next turn, run_chat detects the in-progress chain, injects structured context, and resumes execution. J never sees or edits the chain file directly \u2014 Python owns the read/write cycle. Turns repeat until J declares complete or MAX_CHAIN_TURNS (10, configurable via J_MAX_CHAIN_TURNS) is reached. This replaces mid-turn phase compression for multi-step tasks: each 3-call turn stays well within the 4096 token ceiling, and the chain log IS the compressed state.",
+      "files": [
+        ".gitignore",
+        "app/chat.py"
+      ],
+      "actions": [
+        "Add CHAIN_LOG_PATH = Path('.j_chain.json') constant",
+        "Add MAX_CHAIN_TURNS = int(os.getenv('J_MAX_CHAIN_TURNS', '10')) constant",
+        "Revert MAX_TOOL_BUDGET default back to 3",
+        "Implement checkpoint creation in _run_turn: triggers when remaining <= 0 and turn_tool_calls >= 3",
+        "Build completed steps from turn_tool_log with summaries from turn_tool_digests",
+        "Extract key_facts from tool outputs for cross-turn context",
+        "Call model one final time with checkpoint prompt (tools disabled) to determine status and next_steps",
+        "Merge with existing .j_chain.json preserving prior completed steps and incrementing turn counter",
+        "Write chain state to disk and return immediately (no forced final answer)",
+        "Implement resume loop in run_chat at both initial-message and interactive call sites",
+        "Detect active .j_chain.json with status=='in_progress' and build resume prompt",
+        "Enforce safety cutoff at MAX_CHAIN_TURNS (marks complete and removes file)",
+        "On completion, call model with '[TASK COMPLETE] Summarize what you accomplished.' then delete chain file",
+        "Add .j_chain.json to .gitignore"
+      ],
+      "compatibility_notes": [
+        "Phase compression code is preserved but naturally won't trigger (budget=3 < PHASE_SIZE=4).",
+        "Single-tool or quick-answer turns (budget not exhausted) skip the chain system entirely.",
+        "Chain log is written/read by Python, never by J's tools.",
+        "Resume loop lives in run_chat (outer), NOT _run_turn (inner).",
+        "30 total tool calls ceiling (10 turns \u00d7 3 calls) is configurable via J_MAX_CHAIN_TURNS.",
+        ".j_chain.json is gitignored \u2014 runtime-only artifact."
+      ],
+      "chain_log_schema": {
+        "task": "<original user message>",
+        "status": "in_progress | complete",
+        "turn": "<int, increments each checkpoint>",
+        "completed": [
+          {
+            "step": "<int>",
+            "tool": "<str>",
+            "args": "<list>",
+            "summary": "<str, first 200 chars of output>"
+          }
+        ],
+        "next_steps": "<str, from J's last response>",
+        "key_facts": "<list of str, from turn_tool_digests>"
+      },
+      "pr": 43,
+      "session": 30
     }
   ],
   "migration_order": [
@@ -265,7 +351,11 @@
     "M7",
     "M8",
     "M9",
-    "M10"
+    "M10",
+    "M11",
+    "M12",
+    "M13",
+    "M14"
   ],
   "validation": {
     "commands": [
@@ -277,7 +367,7 @@
       "python -m compileall app/agent/tool_router.py"
     ],
     "expected": "No syntax errors.",
-    "total_commits": 192,
+    "total_commits": 198,
     "total_files": 146,
     "python_modules": 79,
     "python_lines": 13900,
@@ -291,6 +381,10 @@
     "Verify file writes over 4GB are rejected with explicit error.",
     "Verify route_tool_call() returns structured {ok, output/error} for known and unknown tools.",
     "Verify side-effect restrictions block exec/network tools when restricted.",
-    "Verify setup.bat downloads Python, llama.cpp, model, and creates .env on a clean machine."
+    "Verify setup.bat downloads Python, llama.cpp, model, and creates .env on a clean machine.",
+    "Verify .j_chain.json is created when tool budget is exhausted mid-task.",
+    "Verify resume loop picks up in-progress chain and continues execution.",
+    "Verify chain terminates after MAX_CHAIN_TURNS or when J declares complete.",
+    "Verify .j_chain.json is deleted after chain completion."
   ]
 }
