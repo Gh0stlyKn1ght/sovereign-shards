@@ -69,7 +69,7 @@ jobs:
         run: |
           python -c "from app.router import RouteResult; print('✓ Router')"
           python -c "from app.agent.circuit_breaker import CircuitBreaker; print('✓ CircuitBreaker')"
-          python -c "from app.agent.memory import working_memory; print('✓ Memory')"
+          python -c "from app.agent import working_memory; print('✓ Memory')"
           python -c "from app.agent.planner import PlanEngine; print('✓ Planner')"
           python -c "from app.agent.retriever import Retriever; print('✓ Retriever')"
           python -c "from app.agent.sandbox import run_sandbox; print('✓ Sandbox')"
