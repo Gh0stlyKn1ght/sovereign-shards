@@ -1,9 +1,22 @@
 # Chat.py Decomposition Specification
 
 **Status**: READY FOR REVIEW  
-**Target**: Refactor `app/chat.py` (1,111 lines) into 4 focused modules  
-**Scope**: ~650 lines extracted, ~450 lines remaining (41% reduction)  
+**Target**: Refactor `app/chat.py` (1,505 lines) into 4 focused modules  
+**Scope**: ~307 lines extracted, ~1,198 lines remaining (20% reduction)  
 **Safety**: Zero functional changes, dedup cache and circuit breaker preserved, all tests pass  
+
+---
+
+## CORRECTIONS APPLIED (Per Viktor Review)
+
+1. **Line count corrected**: 1,111 → 1,505 (was working off stale snapshot)
+2. **Reduction percentage corrected**: 60% → 20% (realistic estimate based on actual code)
+3. **Line numbers corrected**: All function line refs updated (+2 offset applied)
+4. **Import lists completed**:
+   - `app/llm.py`: Added `preflight_trim` from `app.agent.context`
+   - `app/action.py`: Added missing `ast`, `re` imports
+   - Both modules now list all actual dependencies
+5. **Extraction map updated**: Accurate line ranges for each module
 
 ---
 
@@ -11,22 +24,31 @@
 
 ### File Metrics
 ```
-app/chat.py: 1,111 lines
+app/chat.py: 1,505 lines (CORRECTED — was stale snapshot of 1,111)
 ├── Imports: 1–63 (63 lines)
-├── Constants & config: 65–74 (10 lines)
-├── Helper functions: 76–1080 (~1,000 lines)
-│   ├── Role helpers: _assistant_role, _system_role (5 lines)
-│   ├── LLM layer: _ollama_chat, _llama_cpp_chat, _stream_reply, _check_language_drift (120 lines)
-│   ├── Action parsing: _balanced_json, _extract_action, _strip_identity_preamble (80 lines)
-│   ├── Tool execution: _execute_tool, _truncate_tool_output (40 lines)
-│   ├── Main loop: _run_turn (295 lines)
-│   ├── Reflection: _maybe_auto_reflect (40 lines)
-│   ├── Agent task: _run_agent_task (160 lines)
-│   ├── Buffer plan: _run_buffer_plan (175 lines)
-│   ├── Quick build: _handle_quick_build (35 lines)
-│   └── REPL: run_chat (170 lines)
+├── Constants & config: 65–77 (13 lines)
+├── Helper functions: 76–1500 (~1,424 lines)
+│   ├── Role helpers: _assistant_role, _system_role (lines 76–100, ~5 lines)
+│   ├── LLM layer: _ollama_chat (line 273), _llama_cpp_chat (line 309), 
+│   │              _check_language_drift (line 343), _stream_reply (line 355)
+│   │              Total: ~120 lines (273–422)
+│   ├── Action parsing: _balanced_json (line 104), _extract_action (line 136),
+│   │                   _strip_identity_preamble (line 215), _truncate_tool_output (line 225)
+│   │                   Total: ~135 lines (104–244)
+│   ├── Tool execution: _execute_tool (line 246, ~27 lines)
+│   ├── Main loop: _run_turn (line 459+, ~350 lines estimated)
+│   ├── Reflection: _maybe_auto_reflect (line 425+, ~40 lines)
+│   ├── Agent task: _run_agent_task (line 754+, ~160 lines)
+│   ├── Buffer plan: _run_buffer_plan (line 910+, ~175 lines)
+│   ├── Quick build: _handle_quick_build (line 1080+, ~35 lines)
+│   └── REPL: run_chat (line 1111+, ~200 lines)
 └── Entry: run_chat
 ```
+
+**Extraction targets** (~307 lines removed):
+- app/llm.py: 120 lines (lines 273–422)
+- app/action.py: 135 lines (lines 104–244)
+- app/tool_exec.py: 52 lines (lines 246–297 + execute_tool + imports)
 
 ### Functional Groups (Cohesion Analysis)
 | Group | Lines | Cohesion | Extract? | Rationale |
@@ -58,17 +80,20 @@ def stream_reply(client: RuntimeConfig, messages: list[dict[str, str]]) -> str
 
 **Imports**:
 ```python
+from json import dumps, loads
+from urllib.request import Request, urlopen
 from app.client import RuntimeConfig
 from app import personality as persona
-from urllib.request import Request, urlopen
-from json import JSONDecodeError, loads
+from app.agent.context import preflight_trim  # CORRECTED: was missing
+from app.errors import TransportError
+from core.fivemasters import evaluate_code
 ```
 
 **Dependencies**: None on other app.agent modules (safe to import anywhere)
 
 ---
 
-### New Module: `app/action.py` (80 lines)
+### New Module: `app/action.py` (135 lines)
 **Purpose**: Parse and validate tool calls from LLM output.
 
 **Functions**:
@@ -84,6 +109,10 @@ def truncate_tool_output(output: str, max_lines: int = MAX_TOOL_OUTPUT_LINES) ->
 
 **Imports**:
 ```python
+import ast          # CORRECTED: was missing (for ast.literal_eval in _extract_action)
+import re           # CORRECTED: was missing (for re.search, re.match throughout)
+from json import loads, JSONDecodeError
+
 MAX_TOOL_OUTPUT_LINES = 60  # moved from chat.py constants
 ```
 
@@ -91,7 +120,7 @@ MAX_TOOL_OUTPUT_LINES = 60  # moved from chat.py constants
 
 ---
 
-### New Module: `app/tool_exec.py` (40 lines)
+### New Module: `app/tool_exec.py` (52 lines)
 **Purpose**: Execute tool calls and format results for LLM consumption.
 
 **Functions**:
@@ -114,7 +143,7 @@ from app.action import truncate_tool_output
 
 ---
 
-### Refactored Module: `app/chat.py` (450 lines)
+### Refactored Module: `app/chat.py` (1,198 lines)
 **Purpose**: High-level REPL orchestration and turn management.
 
 **Retained functions**:
@@ -129,14 +158,20 @@ from app.action import truncate_tool_output
 
 **Imports (new)**:
 ```python
-from app.llm import stream_reply
-from app.action import extract_action, strip_identity_preamble, truncate_tool_output
-from app.tool_exec import execute_tool, PROCESS_PAUSE_SECONDS
+from app.llm import stream_reply as _stream_reply
+from app.action import extract_action, strip_identity_preamble, truncate_tool_output, MAX_TOOL_OUTPUT_LINES
+from app.tool_exec import execute_tool as _execute_tool, PROCESS_PAUSE_SECONDS
 ```
+
+**Removed function definitions**:
+- Lines 104–244 (action parsing functions → app/action.py)
+- Lines 246–297 (tool execution → app/tool_exec.py)
+- Lines 273–422 (LLM layer → app/llm.py)
 
 **Removed imports** (moved to sub-modules):
 - `urlopen`, `Request` → `app/llm.py`
-- `JSONDecodeError` → `app/llm.py`
+- `JSONDecodeError`, `loads` → handled by sub-modules
+- `ast`, `re` → `app/action.py`
 
 ---
 
@@ -294,7 +329,7 @@ read run.py
 | **All tests pass** | `pytest tests/ -x -q` (expect 20+ pass) |
 | **E2E suite passes** | `python tests/e2e_runner.py` (expect 18/20+) |
 | **No functional regressions** | Manual smoke tests (hey J, ls ., read, /tools) |
-| **Code is cleaner** | `app/chat.py` reduced from 1,111 → ~450 lines (60% reduction) |
+| **Code is cleaner** | `app/chat.py` reduced from 1,505 → ~1,198 lines (20% reduction) |
 | **No new warnings** | `pylint app/*.py` (max 1–2 minor warnings acceptable) |
 
 ---
@@ -312,16 +347,16 @@ Once this decomposition is complete:
 ## 10. Verification Checklist
 
 **Pre-extraction**:
-- [ ] Current `app/chat.py` line count: 1,111 (baseline)
+- [ ] Current `app/chat.py` line count: 1,505 (baseline — CORRECTED from stale 1,111)
 - [ ] All tests pass: `pytest tests/ -x` (baseline)
 - [ ] `git status` clean (no uncommitted changes)
 - [ ] Create git checkpoint: `git commit -m "checkpoint: before chat.py decomposition"`
 
 **During extraction**:
-- [ ] Create `app/llm.py` with correct imports
-- [ ] Create `app/action.py` with correct imports
-- [ ] Create `app/tool_exec.py` with correct imports
-- [ ] Update `app/chat.py` imports and remove old function defs
+- [ ] Create `app/llm.py` from lines 273–422 (120 lines)
+- [ ] Create `app/action.py` from lines 104–244 (135 lines)
+- [ ] Create `app/tool_exec.py` from lines 246–297 + dependencies (52 lines)
+- [ ] Update `app/chat.py` imports and remove extracted function defs
 - [ ] Verify no syntax errors: `python -m py_compile app/chat.py app/llm.py app/action.py app/tool_exec.py`
 
 **Post-extraction**:
@@ -331,7 +366,7 @@ Once this decomposition is complete:
 - [ ] Manual smoke: `hey J` → responds
 - [ ] Manual smoke: `ls .` → tool executes
 - [ ] Full E2E: `python tests/e2e_runner.py`
-- [ ] New file count: 1,111 → 450 in `app/chat.py`, ~120 in `app/llm.py`, ~80 in `app/action.py`, ~40 in `app/tool_exec.py`
+- [ ] New file count: 1,505 → ~1,198 in `app/chat.py`, ~120 in `app/llm.py`, ~135 in `app/action.py`, ~52 in `app/tool_exec.py`
 
 ---
 
@@ -353,26 +388,30 @@ Once this decomposition is complete:
 
 ## Appendix: Line-by-Line Extraction Map
 
-### `app/llm.py` (from chat.py lines 341–419)
+### `app/llm.py` (from chat.py lines 273–422, ~120 lines)
 ```python
-# 341–351: _check_language_drift
-# 353–419: _stream_reply (including _ollama_chat 271–305 and _llama_cpp_chat 307–339)
+# 273–342: _ollama_chat + _llama_cpp_chat
+# 343–354: _check_language_drift
+# 355–422: _stream_reply (including calls to preflight_trim, evaluate_code, persona.strip_bleed)
 ```
 
-### `app/action.py` (from chat.py lines 102–242)
+### `app/action.py` (from chat.py lines 104–244, ~135 lines)
 ```python
-# 102–132: _balanced_json
-# 134–211: _extract_action
-# 213–221: _strip_identity_preamble
-# 223–242: _truncate_tool_output
+# 104–134: _balanced_json
+# 136–213: _extract_action (uses ast.literal_eval, re.search, re.match, loads, JSONDecodeError)
+# 215–223: _strip_identity_preamble
+# 225–243: _truncate_tool_output
 # 65–74: Move MAX_TOOL_OUTPUT_LINES constant here
 ```
 
-### `app/tool_exec.py` (from chat.py lines 244–269)
+### `app/tool_exec.py` (from chat.py lines 246–297, ~52 lines)
 ```python
-# 244–269: _execute_tool
+# 246–271: _execute_tool (calls registry.execute, then _truncate_tool_output)
 # 65–74: Move PROCESS_PAUSE_SECONDS constant here
 ```
+
+**Total extracted**: 307 lines  
+**Remaining in chat.py**: 1,505 - 307 = 1,198 lines
 
 ---
 
