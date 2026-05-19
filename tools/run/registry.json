@@ -200,5 +200,21 @@
       }
     ],
     "side_effect": "exec"
+  },
+  "run_api_generator": {
+    "description": "Generate REST API endpoints from a schema",
+    "args": [
+      {
+        "name": "schema",
+        "type": "json",
+        "required": true
+      },
+      {
+        "name": "output_path",
+        "type": "str",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
   }
 }
