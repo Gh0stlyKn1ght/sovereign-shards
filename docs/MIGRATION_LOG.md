@@ -2036,3 +2036,111 @@ Tests:           212 (all passing)
 | `docs/VIDEO_DEMO_SPEC.md` | ADDED | Demo video spec |
 | `docs/BUSINESS_MODEL.md` | UPDATED | Pricing alignment |
 | `assets/j-demo.mp4` | ADDED | 20MB demo video |
+
+---
+
+## Session 32 — J Cloud: Cloud Agent Platform
+
+**Date:** 2026-05-19
+**Agent:** Viktor (getviktor.com) — direct pushes. 222+ total commits on main.
+**Milestone:** M16
+
+### What Shipped
+
+1. **J Cloud Viktor Space** (`j-cloud-b5a9dc72.viktor.space`)
+   - Full cloud deployment of J as an autonomous development agent
+   - Backend: Convex (conversations, messages, chain logs, admin settings, GitHub connections)
+   - Frontend: React + Tailwind, B.L.U.E. J. aesthetic (dark `#06060F`, Dodger Blue `#1E90FF`, gold `#FFD700`)
+   - Auth: Convex built-in auth (email/password)
+
+2. **Five Masters System Prompt Integration**
+   - All Five Masters baked into J's system prompt as governing law
+   - Korotkevich (efficiency), Torvalds (error handling), Carmack (performance), Hamilton (fault tolerance), Ritchie (clarity)
+   - J evaluates all code against the Five Masters before pushing
+   - Five Masters compliance scoring on code reviews
+
+3. **Plan-First Enforcement**
+   - J's first action on any development task is a structured plan
+   - Workflow: UNDERSTAND (read repo) → PLAN (decompose into steps) → BUILD (atomic commits) → VERIFY (check + Five Masters)
+   - Reduces retries and eliminates guesswork within the token budget
+
+4. **Autonomy Modes**
+   - **Manual:** Show plan, wait for approval on each step, explain everything
+   - **Semi-Auto:** Show plan, execute on approval, report results (default)
+   - **Full-Auto:** Read goal → plan → execute → push → report when done
+
+5. **Full Development Tool Engine** (`convex/tools.ts`)
+   - `web_search` — DuckDuckGo HTML scrape, top 5 results
+   - `github_list_tree` — recursive repo tree via Git Data API
+   - `github_read_file` — raw file content from any branch
+   - `github_write_file` — single file create/update via Contents API
+   - `github_multi_commit` — **atomic multi-file push** via Git Data API (blobs → tree → commit → ref update)
+   - `github_create_branch` — branch from any ref
+   - `github_create_pr` — open pull requests with title/body
+   - `github_delete_file` — file removal with SHA lookup
+   - `executeTool()` dispatcher with error handling
+
+6. **Agentic Tool Loop** (`convex/llm.ts`)
+   - Up to 3 tool calls per round (J_TOOL_BUDGET=3)
+   - Up to 3 agentic loop rounds per conversation turn (MAX_TOOL_ROUNDS=3)
+   - 9 total tool calls per turn maximum
+   - Context budget: 3000 tokens with reverse-chronological message packing
+   - Tool results stored in message metadata and rendered inline in chat
+
+7. **Frontend Pages**
+   - `ChatPage.tsx` — Full chat UI with tool call rendering (status badges, result previews)
+   - `EditorPage.tsx` — GitHub file browser with tree navigation
+   - `ChainLogsPage.tsx` — Chain session list with status indicators
+   - `AdminPage.tsx` — Stats dashboard, inline settings editor (API keys, model, GitHub token)
+   - `LandingPage.tsx` — B.L.U.E. J. styled hero page
+   - `LoginPage.tsx` / `SignupPage.tsx` — Themed auth pages
+
+8. **README Update**
+   - Added J Cloud section with feature table
+   - Added J Cloud link to nav bar
+   - Production URL: `j-cloud-b5a9dc72.viktor.space`
+
+### Architecture
+
+```
+j-cloud/
+├── convex/
+│   ├── schema.ts          # Tables: conversations, messages, chainLogs, githubConnections, fileCache, adminSettings
+│   ├── conversations.ts   # CRUD with auth + ownership
+│   ├── messages.ts        # List, send, addAssistantMessage (internal + public)
+│   ├── llm.ts             # Agentic chat action: Five Masters prompt → Groq API → tool loop
+│   ├── tools.ts           # 8 dev tools + executeTool dispatcher
+│   ├── chainLogs.ts       # Session-grouped chain log management
+│   ├── admin.ts           # Settings CRUD (masks API keys in reads)
+│   ├── github.ts          # GitHub connection management
+│   └── users.ts           # Viewer query
+├── src/
+│   ├── pages/             # 7 pages (Chat, Editor, ChainLogs, Admin, Landing, Login, Signup)
+│   ├── components/        # AppSidebar, AppLayout
+│   └── index.css          # Full B.L.U.E. J. theme
+└── build.mjs              # Vite build with inline config (workaround for root-owned node_modules)
+```
+
+### Infrastructure
+
+| Component | URL |
+|-----------|-----|
+| Production | `https://j-cloud-b5a9dc72.viktor.space` |
+| Preview | `https://preview-j-cloud-b5a9dc72.viktor.space` |
+| Convex (dev) | `https://capable-gazelle-278.convex.cloud` |
+| Convex (prod) | `https://wonderful-antelope-842.convex.cloud` |
+
+### Design Decisions
+
+1. **Groq free tier as LLM backend** — Viktor Space can't run local inference; Groq provides OpenAI-compatible API with function calling support at zero cost
+2. **Git Data API for multi-commit** — Contents API only supports single-file operations; Git Data API (blobs → tree → commit → ref) enables atomic multi-file pushes
+3. **Five Masters in system prompt** — not just documentation; the Five Masters are injected into every LLM call as non-negotiable governance rules
+4. **Plan-first by prompt** — J is instructed to always understand repo structure and plan changes before touching files, reducing wasted tool calls within the 4096 token budget
+5. **B.L.U.E. J. aesthetic** — visual cohesion with the Sovereign Shards brand across all surfaces
+
+### Files Changed
+
+| File | Action | Notes |
+|------|--------|-------|
+| `README.md` | UPDATED | Added J Cloud section, nav link |
+| `docs/MIGRATION_LOG.md` | UPDATED | Session 32 entry |

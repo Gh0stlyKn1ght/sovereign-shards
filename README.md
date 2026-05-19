@@ -32,6 +32,7 @@
 
 <p align="center">
   <a href="https://sovereign-shards-62eaaf99.viktor.space">Landing Page</a> · 
+  <a href="https://j-cloud-b5a9dc72.viktor.space">J Cloud</a> · 
   <a href="https://five-masters-b9b95dc3.viktor.space">The Five Masters</a> · 
   <a href="docs/USER_MANUAL.md">User Manual</a> · 
   <a href="docs/ROADMAP.md">Roadmap</a> · 
@@ -73,6 +74,27 @@ User Input
 Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in your pocket. No cloud account. No API key. No internet connection. Just your hardware.
 
 **Why this matters:** Every other autonomous coding agent (Claude Code, Codex, Cline, Aider) requires cloud APIs, internet, or heavy toolchains. J requires a USB port and 16 GB of RAM. The agent that runs in your pocket is the agent that runs anywhere.
+
+---
+
+## ☁️ J Cloud
+
+**J in the browser.** Same brain, same Five Masters governance, same plan-first workflow — running in the cloud.
+
+> **[Launch J Cloud →](https://j-cloud-b5a9dc72.viktor.space)**
+
+| Feature | Description |
+|---------|-------------|
+| 🏛️ **Five Masters Governance** | Every line J writes is evaluated against all Five Masters before it ships. The same code law that governs the USB agent governs the cloud agent. This is non-negotiable. |
+| 📋 **Plan-First Development** | J's first move on ANY task is a structured plan: understand the repo → decompose into steps → state file changes → execute atomically. Fewer retries, zero guesswork. |
+| 🤖 **Three Autonomy Modes** | **Manual** (approve each step) · **Semi-Auto** (approve plan, auto-execute) · **Full-Auto** (read goal → plan → build → push → report). |
+| 🔧 **8 Dev Tools** | `web_search` · `github_list_tree` · `github_read_file` · `github_write_file` · `github_multi_commit` · `github_create_branch` · `github_create_pr` · `github_delete_file` |
+| ⚛️ **Atomic Multi-File Commits** | `github_multi_commit` uses Git Data API (blobs → tree → commit → ref update) to push entire builds in a single atomic commit. This is J's primary build tool. |
+| 🔄 **Agentic Tool Loop** | Up to 3 tool calls per round, 3 rounds per turn (9 tool calls max). Tool results render inline with status badges. |
+| 🎨 **B.L.U.E. J. Aesthetic** | Full IDE-style interface: chat, GitHub file browser, chain logs, admin panel. Dark theme, Dodger Blue primary, gold accents. |
+| 🔑 **Bring Your Own Key** | Free Groq API for inference. Configurable model: `llama-3.1-8b-instant`, `qwen-qwq-32b`, `llama-3.3-70b-versatile`. |
+
+J Cloud is the cloud extension of the USB agent. The USB stick is home. The cloud is reach.
 
 ---
 
