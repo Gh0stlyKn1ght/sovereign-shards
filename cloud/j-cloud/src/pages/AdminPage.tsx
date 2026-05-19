@@ -130,6 +130,11 @@ function SettingRow({
             <Button
               size="sm"
               onClick={() => {
+                // Don't overwrite with empty or masked values
+                if (config.sensitive && (!editValue.trim() || editValue.startsWith("••"))) {
+                  setEditing(false);
+                  return;
+                }
                 onSave(settingKey, editValue);
                 setEditing(false);
               }}
@@ -152,7 +157,8 @@ function SettingRow({
         ) : (
           <button
             onClick={() => {
-              setEditValue(value);
+              // For sensitive fields, don't pre-fill masked value — start blank
+              setEditValue(config.sensitive ? "" : value);
               setEditing(true);
             }}
             className="text-xs font-mono px-3 py-1.5 rounded bg-[#06060F] border border-[#1a1a2e] text-[#8888a0] hover:text-white hover:border-[#1E90FF]/30 transition text-left w-full truncate"

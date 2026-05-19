@@ -23,6 +23,8 @@ import {
   FileText,
   Image as ImageIcon,
   FileCode,
+  Menu,
+  ChevronLeft,
 } from "lucide-react";
 
 // =================== VOICE: TTS + STT ===================
@@ -244,7 +246,7 @@ function MessageBubble({
         )}
       </div>
       <div
-        className={`max-w-[80%] rounded-xl px-4 py-3 ${
+        className={`max-w-[85%] sm:max-w-[80%] rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 ${
           isAssistant
             ? "bg-[#0d0d1a] border border-[#1a1a2e]"
             : "bg-[#1E90FF]/10 border border-[#1E90FF]/20"
@@ -424,6 +426,7 @@ export function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -525,9 +528,22 @@ export function ChatPage() {
     setIsLoading(false);
   };
 
+  const createConvo = useMutation(api.conversations.create);
+
+  const handleMobileSelect = (id: Id<"conversations">) => {
+    setActiveConvo(id);
+    setMobileMenuOpen(false);
+  };
+
+  const handleMobileNewChat = async () => {
+    const id = await createConvo({});
+    setActiveConvo(id);
+    setMobileMenuOpen(false);
+  };
+
   return (
     <div className="flex h-full bg-[#06060F]">
-      {/* Sidebar — conversation list */}
+      {/* Desktop sidebar — conversation list */}
       <div className="hidden md:flex w-64 border-r border-[#1a1a2e] bg-[#0a0a14] flex-col">
         <div className="p-4 border-b border-[#1a1a2e]">
           <div className="flex items-center gap-2">
@@ -545,27 +561,78 @@ export function ChatPage() {
         <ConversationList activeId={activeConvo} onSelect={setActiveConvo} />
       </div>
 
+      {/* Mobile slide-over panel */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Panel */}
+          <div className="relative w-72 max-w-[80vw] h-full bg-[#0a0a14] border-r border-[#1a1a2e] flex flex-col animate-in slide-in-from-left duration-200">
+            <div className="p-4 border-b border-[#1a1a2e] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="size-8 rounded-lg bg-gradient-to-br from-[#1E90FF] to-[#00d4aa] flex items-center justify-center">
+                  <Zap className="size-4 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-white">J Cloud</h1>
+                  <p className="text-[10px] text-[#8888a0]">Conversations</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-[#8888a0] hover:text-white p-1"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+            </div>
+            <ConversationList activeId={activeConvo} onSelect={handleMobileSelect} />
+          </div>
+        </div>
+      )}
+
       {/* Main chat area */}
       <div className="flex-1 flex flex-col relative min-h-0">
         {/* Header */}
-        <div className="h-12 shrink-0 border-b border-[#1a1a2e] bg-[#0a0a14]/80 backdrop-blur-sm flex items-center px-4 gap-3">
+        <div className="h-12 shrink-0 border-b border-[#1a1a2e] bg-[#0a0a14]/80 backdrop-blur-sm flex items-center px-3 sm:px-4 gap-2 sm:gap-3">
+          {/* Mobile menu toggle */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden text-[#8888a0] hover:text-white p-1 -ml-1"
+          >
+            <Menu className="size-5" />
+          </button>
+
           <div className="flex items-center gap-2">
             <div className="size-2 rounded-full bg-[#00FF41] animate-pulse" />
             <span className="text-sm font-medium text-white">J</span>
             <Badge
               variant="outline"
-              className="text-[10px] border-[#1a1a2e] text-[#8888a0]"
+              className="text-[10px] border-[#1a1a2e] text-[#8888a0] hidden sm:inline-flex"
             >
               {model || "gemini-2.0-flash"}
             </Badge>
           </div>
-          <div className="ml-auto flex items-center gap-2 text-[10px] text-[#8888a0]">
-            <span>4096 tokens</span>
+
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[10px] text-[#8888a0] hidden sm:inline">4096 tokens</span>
             {speaking && (
               <Badge className="bg-[#1E90FF]/20 text-[#1E90FF] text-[9px] border-none">
                 <Volume2 className="size-2.5 mr-1" /> Speaking
               </Badge>
             )}
+            {/* Mobile new chat button */}
+            <Button
+              onClick={handleMobileNewChat}
+              variant="ghost"
+              size="sm"
+              className="md:hidden text-[#1E90FF] hover:bg-[#1E90FF]/10 h-8 w-8 p-0"
+              title="New chat"
+            >
+              <Plus className="size-4" />
+            </Button>
           </div>
         </div>
 
@@ -599,16 +666,23 @@ export function ChatPage() {
           )}
 
           {!activeConvo ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="size-16 rounded-2xl bg-gradient-to-br from-[#1E90FF]/20 to-[#00d4aa]/20 flex items-center justify-center mb-4 j-glow">
                 <Bot className="size-8 text-[#1E90FF]" />
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Talk to J</h2>
-              <p className="text-sm text-[#8888a0] max-w-sm">
+              <p className="text-sm text-[#8888a0] max-w-sm mb-4">
                 Start a new conversation or select an existing one.
                 <br />
                 J plans, codes, tests, and ships — autonomously.
               </p>
+              {/* Mobile-visible new chat button */}
+              <Button
+                onClick={handleMobileNewChat}
+                className="bg-[#1E90FF] hover:bg-[#1E90FF]/80 text-white px-6 py-2.5 text-sm"
+              >
+                <Plus className="size-4 mr-2" /> New Chat
+              </Button>
             </div>
           ) : messages?.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
@@ -668,8 +742,8 @@ export function ChatPage() {
         )}
 
         {/* Input */}
-        <div className="border-t border-[#1a1a2e] bg-[#0a0a14]/80 backdrop-blur-sm p-4 shrink-0">
-          <div className="flex gap-2 items-end">
+        <div className="border-t border-[#1a1a2e] bg-[#0a0a14]/80 backdrop-blur-sm p-2 sm:p-4 shrink-0">
+          <div className="flex gap-1.5 sm:gap-2 items-end">
             {/* File attach button */}
             <input
               ref={fileInputRef}
@@ -686,19 +760,19 @@ export function ChatPage() {
               disabled={!activeConvo}
               variant="ghost"
               size="sm"
-              className="shrink-0 text-[#8888a0] hover:text-[#1E90FF] hover:bg-[#1E90FF]/10 h-10 w-10 p-0"
+              className="shrink-0 text-[#8888a0] hover:text-[#1E90FF] hover:bg-[#1E90FF]/10 size-9 sm:size-10 p-0"
               title="Attach files"
             >
               <Paperclip className="size-4" />
             </Button>
 
-            {/* Mic button */}
+            {/* Mic button — hidden on very small screens to save space */}
             <Button
               onClick={() => (listening ? stopListening() : startListening())}
               disabled={!activeConvo}
               variant="ghost"
               size="sm"
-              className={`shrink-0 h-10 w-10 p-0 ${
+              className={`shrink-0 hidden xs:flex size-9 sm:size-10 p-0 ${
                 listening
                   ? "text-[#ff4444] bg-[#ff4444]/10 hover:bg-[#ff4444]/20 hover:text-[#ff4444]"
                   : "text-[#8888a0] hover:text-[#1E90FF] hover:bg-[#1E90FF]/10"
@@ -725,11 +799,11 @@ export function ChatPage() {
                 listening
                   ? "Listening…"
                   : activeConvo
-                    ? "Message J… (or drag & drop files)"
-                    : "Select a conversation first"
+                    ? "Message J…"
+                    : "Start a new chat →"
               }
               disabled={!activeConvo || isLoading}
-              className={`flex-1 bg-[#0d0d1a] border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-[#8888a0] focus:outline-none focus:border-[#1E90FF]/50 focus:ring-1 focus:ring-[#1E90FF]/20 transition disabled:opacity-50 ${
+              className={`flex-1 min-w-0 bg-[#0d0d1a] border rounded-xl px-3 sm:px-4 py-2.5 text-sm text-white placeholder:text-[#8888a0] focus:outline-none focus:border-[#1E90FF]/50 focus:ring-1 focus:ring-[#1E90FF]/20 transition disabled:opacity-50 ${
                 listening
                   ? "border-[#ff4444]/50 animate-pulse"
                   : "border-[#1a1a2e]"
@@ -742,7 +816,7 @@ export function ChatPage() {
                 (!input.trim() && attachedFiles.length === 0) ||
                 isLoading
               }
-              className="bg-[#1E90FF] hover:bg-[#1E90FF]/80 text-white px-4 shrink-0"
+              className="bg-[#1E90FF] hover:bg-[#1E90FF]/80 text-white shrink-0 size-10 sm:px-4 sm:w-auto p-0 sm:p-2"
             >
               <Send className="size-4" />
             </Button>

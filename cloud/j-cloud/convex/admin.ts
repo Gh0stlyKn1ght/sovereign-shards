@@ -60,10 +60,10 @@ export const getAllSettings = query({
 
     const result: Array<{ key: string; value: string }> = [];
     for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
-      // Mask sensitive keys
       let value = storedMap.get(key) ?? defaultVal;
-      if (MASKED_KEYS.has(key) && value && value.length > 8) {
-        value = value.slice(0, 8) + "…" + value.slice(-4);
+      // Mask sensitive keys — only show last 4 chars
+      if (MASKED_KEYS.has(key) && value && value.length > 4) {
+        value = "••••••••" + value.slice(-4);
       }
       result.push({ key, value });
     }
