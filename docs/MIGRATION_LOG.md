@@ -2144,3 +2144,79 @@ j-cloud/
 |------|--------|-------|
 | `README.md` | UPDATED | Added J Cloud section, nav link |
 | `docs/MIGRATION_LOG.md` | UPDATED | Session 32 entry |
+
+---
+
+## Session 33 — 2026-05-19 (JGPU follow-up hardening pass)
+
+### Scope
+- Addressed follow-up request to continue JGPU sprint discipline and preserve isolation boundaries.
+- Added this explicit migration append for traceability on every push.
+
+### Notes
+- No cross-contamination into legacy shard runtime paths; JGPU remains scoped to `jgpu/` and top-level program docs.
+- Prepared for next sprint slice with signed session log continuity.
+
+**Signed-off-by:** Codex Agent <codex@openai>
+
+---
+
+## Session 34 — 2026-05-19 (JGPU Phase 6 baseline primitives)
+
+### Scope
+- Implemented baseline LLM operation kernels inside isolated `jgpu/kernels`.
+- Updated program tracking docs (`README.md`, `PLANS.md`, `AGENTS.md`) with live checklist/status marks.
+
+### Delivered
+- Added functional CPU implementations for `rmsnorm`, `softmax_last_dim`, `apply_rope`, `attention`, and `KvCache` append/latest semantics.
+- Added unit tests for each new primitive to enforce correctness and finite outputs.
+- Marked completed work in JGPU checklist and phase status blocks.
+
+**Signed-off-by:** Codex Agent <codex@openai>
+
+---
+
+## Session 35 — 2026-05-20 (JGPU readiness audit: working vs missing)
+
+### Scope
+- Performed a comprehensive status evaluation of the isolated `jgpu/` workspace.
+- Documented what is functional now, what is missing, and an execution sequence to finish without structural refactors.
+
+### Working now (verified in-source)
+- Tensor core foundation is implemented (`zeros`, `ones`, `random`, row-major indexing, reshape/flatten, transpose2d).
+- Kernel layer includes baseline compute primitives: matmul (naive + rayon parallel), `rmsnorm`, `softmax_last_dim`, `apply_rope`, `attention`, plus `KvCache` append/latest semantics.
+- Runtime has asynchronous command queue execution for matmul and a clean worker shutdown path.
+- Graph executor supports dependency-aware topological execution (`Input`, `MatMul`, `Add`) and cycle detection.
+- Memory module provides allocation bookkeeping with temperature classes and refcount lifecycle.
+- Backend crate exposes initial identity surface (`jgpu_backend_info`) for future backend registration wiring.
+
+### Not there yet (finish-line blockers)
+- No llama.cpp backend bridge exists yet (`ggml-jgpu.c/h` mapping layer not implemented).
+- No Ollama runtime integration path exists yet (backend detection/loading and `ollama run` routing).
+- Virtual VRAM paging system is not implemented (file-backed swap, paging policy, transfer accounting).
+- Runtime command surface is narrow (matmul only; missing broader op dispatch and dependency-aware async futures).
+- Phase 6 validation is incomplete (no end-to-end TinyLlama forward-pass harness using current primitives).
+- Quantization paths are not implemented (FP16/INT8 storage/compute and conversion pipelines).
+- Distributed execution phases (node manager, transport, RPC, sharding, distributed scheduler) are not started.
+- Profiling hooks/logging are not consistently wired through each subsystem despite baseline tests.
+
+### Non-refactor completion plan (preserve current structure)
+1. Extend existing crates in-place (no crate moves):
+   - `tensor`: add dtype-backed storage adapters + quantization encode/decode helpers.
+   - `kernels`: add remaining transformer kernels + deterministic reference tests.
+   - `runtime`: expand command enum/dispatcher incrementally for existing ops.
+   - `memory`: add paging table and file-backed page store behind current allocator API.
+   - `backend`: keep as bridge namespace and add llama.cpp interop bindings there.
+2. Add validation harnesses before optimizations:
+   - Local forward-pass fixtures (small deterministic tensors) first.
+   - TinyLlama smoke path second.
+3. Add profiler/logging hooks per subsystem without API churn:
+   - latency timers, allocation counters, queue depth, kernel invocation traces.
+4. Only after correctness gates pass:
+   - optimize kernels and scheduler.
+5. Then integrate llama.cpp backend, then Ollama, then distributed layers.
+
+### Immediate next slice recommendation
+- Build a deterministic transformer block forward harness (RMSNorm -> QKV projections via matmul -> RoPE -> attention -> residual add) under current crate boundaries, with fixtures + benchmark + trace logging.
+
+**Signed-off-by:** Codex Agent <codex@openai>
