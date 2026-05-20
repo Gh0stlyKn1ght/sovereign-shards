@@ -1,2 +1,3 @@
-def editor_fixer():
-    # implementation
+import editor_fixer
+
+editor_fixer.editor_fixer()
