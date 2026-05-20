@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 
+from . import working_memory as working_memory
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MEMORY_PATH = BASE_DIR / "logs" / "memory.json"
 MAX_MEMORY_BYTES = 64 * 1024  # 64 KB
