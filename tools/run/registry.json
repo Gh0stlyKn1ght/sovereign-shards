@@ -216,5 +216,26 @@
       }
     ],
     "side_effect": "exec"
+  },
+  "run_editor_fixer": {
+    "description": "Fixes the editor by replacing the broken script with a working one",
+    "args": [
+      {
+        "name": "editor_path",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "broken_code",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "working_code",
+        "type": "str",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
   }
 }
