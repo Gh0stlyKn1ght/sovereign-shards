@@ -237,5 +237,36 @@
       }
     ],
     "side_effect": "exec"
+  },
+  "run_tool_forge": {
+    "description": "Generate new tool script",
+    "args": [
+      {
+        "name": "name",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "purpose",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "inputs",
+        "type": "list[str]",
+        "required": true
+      },
+      {
+        "name": "outputs",
+        "type": "list[str]",
+        "required": true
+      },
+      {
+        "name": "dependencies",
+        "type": "list[str]",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
   }
 }
