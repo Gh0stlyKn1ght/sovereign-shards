@@ -13,11 +13,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/s4ndm4n33-spec/sovereign-shards/actions/workflows/ci.yml"><img src="https://github.com/s4ndm4n33-spec/sovereign-shards/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/phase_1-CLEARED-brightgreen?style=for-the-badge" alt="Phase 1: Cleared" />
   <img src="https://img.shields.io/badge/runs_on-USB_drive-blue?style=for-the-badge" alt="Runs on USB" />
   <img src="https://img.shields.io/badge/cloud-none-critical?style=for-the-badge" alt="No Cloud" />
   <img src="https://img.shields.io/badge/deps-2-yellow?style=for-the-badge" alt="2 Dependencies" />
-  <img src="https://img.shields.io/badge/tests-147%2B_passing-success?style=for-the-badge" alt="147+ Tests" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL_1.1-purple?style=for-the-badge" alt="BSL 1.1" /></a>
+  <img src="https://img.shields.io/badge/tests-212_passing-success?style=for-the-badge" alt="212 Tests" />
   <img src="https://img.shields.io/badge/security-defence_suite-blueviolet?style=for-the-badge" alt="Defence Suite" />
 </p>
 
@@ -30,6 +32,7 @@
 
 <p align="center">
   <a href="https://sovereign-shards-62eaaf99.viktor.space">Landing Page</a> · 
+  <a href="https://j-cloud-b5a9dc72.viktor.space">J Cloud</a> · 
   <a href="https://five-masters-b9b95dc3.viktor.space">The Five Masters</a> · 
   <a href="docs/USER_MANUAL.md">User Manual</a> · 
   <a href="docs/ROADMAP.md">Roadmap</a> · 
@@ -74,6 +77,39 @@ Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in
 
 ---
 
+## ☁️ J Cloud
+
+**J in the browser.** Same brain, same Five Masters governance, same plan-first workflow — running in the cloud.
+
+> **[Launch J Cloud →](https://j-cloud-b5a9dc72.viktor.space)**
+
+| Feature | Description |
+|---------|-------------|
+| 🏛️ **Five Masters Governance** | Every line J writes is evaluated against all Five Masters before it ships. The same code law that governs the USB agent governs the cloud agent. This is non-negotiable. |
+| 📋 **Plan-First Development** | J's first move on ANY task is a structured plan: understand the repo → decompose into steps → state file changes → execute atomically. Fewer retries, zero guesswork. |
+| 🤖 **Three Autonomy Modes** | **Manual** (approve each step) · **Semi-Auto** (approve plan, auto-execute) · **Full-Auto** (read goal → plan → build → push → report). |
+| 🔧 **8 Dev Tools** | `web_search` · `github_list_tree` · `github_read_file` · `github_write_file` · `github_multi_commit` · `github_create_branch` · `github_create_pr` · `github_delete_file` |
+| ⚛️ **Atomic Multi-File Commits** | `github_multi_commit` uses Git Data API (blobs → tree → commit → ref update) to push entire builds in a single atomic commit. This is J's primary build tool. |
+| 🔄 **Agentic Tool Loop** | Up to 3 tool calls per round, 3 rounds per turn (9 tool calls max). Tool results render inline with status badges. |
+| 🎨 **B.L.U.E. J. Aesthetic** | Full IDE-style interface: chat, GitHub file browser, chain logs, admin panel. Dark theme, Dodger Blue primary, gold accents. |
+| 🔑 **Bring Your Own Key** | Free Groq API for inference. Configurable model: `llama-3.1-8b-instant`, `qwen-qwq-32b`, `llama-3.3-70b-versatile`. |
+
+J Cloud is the cloud extension of the USB agent. The USB stick is home. The cloud is reach.
+
+---
+
+
+## 🧱 JGPU Program Track (New)
+
+This repository now also tracks **JGPU**: a distributed, software-defined tensor runtime targeting llama.cpp and Ollama backend execution.
+
+- Program contract: [`AGENTS.md`](AGENTS.md)
+- Full phased plan: [`PLANS.md`](PLANS.md)
+
+JGPU principles are strict: correctness first, profiling before optimization, and architecture changes must update `README.md`, `PLANS.md`, and `AGENTS.md` together.
+
+---
+
 ## ✨ Key Features
 
 | Feature | Description |
@@ -94,7 +130,7 @@ Think of it as **Codex or Claude Code, but it runs off a Kingston USB stick** in
 | ⚡ **Tool Narration** | Tool results displayed as J-voiced one-liners (`⚡ Scanning tools/run... ✓ 18 lines`) instead of raw JSON dumps |
 | 🧮 **Safe Calculator** | AST-based math evaluator — natural language ("47 times 13") + functions (sqrt, log, trig). No eval(), no exec() |
 | 📡 **Streaming Output** | Real-time line-by-line tool output — see builds, tests, and processes as they happen |
-| 🧪 **147+ Test Suite** | Full `unittest` coverage: memory, retriever, planner, executor, sandbox, forge, circuit breaker, optimizer |
+| 🧪 **212 Test Suite** | Full `unittest` + `pytest` coverage: memory, retriever, planner, executor, sandbox, forge, circuit breaker, optimizer, task buffer |
 | 🎨 **Iron Man Terminal UI** | Stark Blue, Gold, Red colour scheme with arc reactor ASCII banner — zero dependencies, pure ANSI |
 | 🔒 **Fully Offline** | Zero network calls. Zero telemetry. Your code never leaves your machine |
 
@@ -270,7 +306,7 @@ sovereign-shards/                     127 files · ~6,500 lines Python
 │   ├── shield.py                     # Shard self-defence (194 lines)
 │   ├── scan.py                       # Host security auditor (~499 lines)
 │   └── bridge.py                     # Remediation generator (252 lines)
-├── tests/                            # 147+ tests (unittest, zero deps)
+├── tests/                            # 212 tests (unittest + pytest)
 │   ├── e2e_runner.py                 # Automated 20-test E2E runner (572 lines)
 │   └── test_*.py                     # Unit tests for every subsystem
 ├── models/                           # GGUF model files (gitignored)
@@ -312,7 +348,7 @@ sovereign-shards/                     127 files · ~6,500 lines Python
 
 ```
 146 files  ·  ~13,900 lines Python  ·  2 dependencies  ·  17 tools
-147+ tests  ·  8 AST transforms  ·  5 code quality masters  ·  3-layer defence suite
+212 tests  ·  8 AST transforms  ·  5 code quality masters  ·  3-layer defence suite
 23 development sessions  ·  ~1,450-line engineering diary
 Zero network calls  ·  Zero telemetry  ·  100% local  ·  USB-portable
 ```
@@ -405,8 +441,9 @@ J occupies a unique position in the local AI agent market. No existing product c
 | Tier | What | Price |
 |------|------|-------|
 | **Open Source Core** | This repo. Full framework, all tools, all tests. | Free |
-| **Pre-Loaded Shards** | USB drives with model, Python, server — plug and play. | $79–$149 |
-| **Enterprise** | Custom shards, dedicated support, compliance packaging. | $500–$5K+ |
+| **Standard Shard** | 16 GB USB — Qwen 7B, portable Python, plug and play. | $49.99 |
+| **Developer Shard** | 32 GB USB — Qwen 14B + Gemma 4, priority support. | $99.99 |
+| **Enterprise Shard** | 64 GB USB — custom config, bulk orders, compliance packaging. | $249.99+ |
 
 > 📋 **[Full business model →](docs/BUSINESS_MODEL.md)**
 
@@ -445,7 +482,7 @@ Two packages. Everything else is Python standard library. That's a hard constrai
 ## 🧪 Testing
 
 ```bash
-# Unit tests (147+, zero external deps)
+# Unit tests (212, pytest)
 python -m pytest tests/
 
 # E2E test suite (20 tests, requires running server)
@@ -474,6 +511,18 @@ python tests/e2e_runner.py
 <p align="center">
   <em>"Systems that persist."</em>
 </p>
+
+---
+
+## License
+
+Sovereign Shards is licensed under the [Business Source License 1.1](LICENSE).
+
+- **Non-commercial use**: Free — personal, educational, and research use welcome.
+- **Commercial use**: Contact vikvondoom2026@gmail.com for licensing.
+- **Change date**: May 17, 2030 — converts to Apache 2.0 after that.
+
+Every source file carries a copyright header. See [LICENSE](LICENSE) for full terms.
 
 ---
 

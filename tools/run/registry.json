@@ -21,11 +21,12 @@
     "side_effect": "write"
   },
   "run_exec": {
-    "description": "Execute provided Python code in a subprocess.",
+    "description": "Execute provided Python code in a sandboxed subprocess with builtin and import restrictions.",
     "args": [
       "code"
     ],
-    "side_effect": "exec"
+    "side_effect": "exec",
+    "timeout_seconds": 10
   },
   "run_scaffold": {
     "description": "Create a package directory with __init__.py.",
@@ -178,5 +179,63 @@
       "expression"
     ],
     "side_effect": "read"
+  },
+  "run_keyword_inference_replace": {
+    "description": "Searches repo via keyword inference and replaces with alternative user designated keywords",
+    "args": [
+      {
+        "name": "keyword",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "alternative_keyword",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "repo_path",
+        "type": "str",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
+  },
+  "run_api_generator": {
+    "description": "Generate REST API endpoints from a schema",
+    "args": [
+      {
+        "name": "schema",
+        "type": "json",
+        "required": true
+      },
+      {
+        "name": "output_path",
+        "type": "str",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
+  },
+  "run_editor_fixer": {
+    "description": "Fixes the editor by replacing the broken script with a working one",
+    "args": [
+      {
+        "name": "editor_path",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "broken_code",
+        "type": "str",
+        "required": true
+      },
+      {
+        "name": "working_code",
+        "type": "str",
+        "required": true
+      }
+    ],
+    "side_effect": "exec"
   }
 }

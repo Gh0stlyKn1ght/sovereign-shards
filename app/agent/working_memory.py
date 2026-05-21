@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Reed Richards (s4ndm4n33). Licensed under BSL 1.1.
 """Tier 2: Working Memory — rolling structured summaries.
 
 Append-only JSONL log of step/turn summaries.
@@ -148,3 +149,16 @@ def compress_turn(user_msg: str, assistant_reply: str) -> dict:
             break
 
     return {"step": step, "result": result, "issue": issue, "decision": decision}
+
+
+class WorkingMemoryStore:
+    """Compatibility wrapper around module-level working-memory helpers."""
+
+    append = staticmethod(append)
+    read_recent = staticmethod(read_recent)
+    read_all = staticmethod(read_all)
+    size_bytes = staticmethod(size_bytes)
+    needs_reflection = staticmethod(needs_reflection)
+    replace_entries = staticmethod(replace_entries)
+    format_for_context = staticmethod(format_for_context)
+    compress_turn = staticmethod(compress_turn)

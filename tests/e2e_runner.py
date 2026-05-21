@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Reed Richards (s4ndm4n33). Licensed under BSL 1.1.
 """
 E2E Test Runner — Sovereign Shards Full System Validation
 ══════════════════════════════════════════════════════════
@@ -190,7 +191,7 @@ TESTS = [
         "kind": "llm",
         "validate": lambda reply, cap: (
             bool(re.search(r"(\d+)\s*match", cap)) and int(re.search(r"(\d+)\s*match", cap).group(1)) > 5,
-            f"{re.search(r'(\\d+)\\s*match', cap).group(1)} matches" if re.search(r"(\d+)\s*match", cap) else "no match count found"
+            "{} matches".format(re.search(r"(\d+)\s*match", cap).group(1)) if re.search(r"(\d+)\s*match", cap) else "no match count found"
         ),
     },
     {

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Reed Richards (s4ndm4n33). Licensed under BSL 1.1.
 """Cross-session memory: persist learnings and preferences.
 
 Stores key-value facts in a simple JSON file.
@@ -9,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
+from . import working_memory as working_memory
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MEMORY_PATH = BASE_DIR / "logs" / "memory.json"

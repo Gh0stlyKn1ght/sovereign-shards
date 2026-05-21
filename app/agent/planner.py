@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Reed Richards (s4ndm4n33). Licensed under BSL 1.1.
 """Planner: decompose a user objective into executable AgentSteps.
 
 The planner asks the LLM to break a task into small, concrete steps,
@@ -114,3 +115,20 @@ def _try_parse_steps(raw: str) -> list[AgentStep]:
             ))
 
     return steps
+
+
+class PlanEngine:
+    """Backwards-compatible planner shim for CI/import stability.
+
+    Legacy integrations import ``PlanEngine`` from this module. The
+    current planner is function-based, so this shim exposes equivalent
+    helpers while preserving the old symbol.
+    """
+
+    @staticmethod
+    def build_prompt(objective: str) -> str:
+        return build_plan_prompt(objective)
+
+    @staticmethod
+    def parse(raw: str, objective: str, mode: AutonomyMode = "semi") -> AgentTask:
+        return parse_plan(raw, objective, mode)

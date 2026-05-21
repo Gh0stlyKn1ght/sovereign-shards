@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Reed Richards (s4ndm4n33). Licensed under BSL 1.1.
 """BM25 retriever: pure Python, zero deps.
 
 Scores memory chunks against a query using BM25 term weighting.
@@ -50,6 +51,25 @@ def bm25_score(
         denominator = term_freq + K1 * (1 - B + B * (dl / max(avg_dl, 1)))
         score += idf * (numerator / denominator)
     return score
+
+
+class Retriever:
+    """BM25 retriever wrapper for memory/knowledge chunks.
+
+    Provides a stateful interface: load chunks once, query many times.
+    """
+
+    def __init__(self, chunks: list[dict] | None = None, top_k: int = 5):
+        self.chunks: list[dict] = chunks or []
+        self.top_k = top_k
+
+    def add(self, chunk: dict) -> None:
+        """Add a chunk to the retriever's corpus."""
+        self.chunks.append(chunk)
+
+    def query(self, query: str, top_k: int | None = None) -> list[dict]:
+        """Retrieve top-K chunks most relevant to the query."""
+        return retrieve(query, self.chunks, top_k or self.top_k)
 
 
 def retrieve(
