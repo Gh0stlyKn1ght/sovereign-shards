@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Gh0stlyKn1ght/sovereign-shards/actions/workflows/ci.yml"><img src="https://github.com/Gh0stlyKn1ght/sovereign-shards/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/s4ndm4n33-spec/sovereign-shards/actions/workflows/ci.yml"><img src="https://github.com/s4ndm4n33-spec/sovereign-shards/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/phase_1-CLEARED-brightgreen?style=for-the-badge" alt="Phase 1: Cleared" />
   <img src="https://img.shields.io/badge/runs_on-USB_drive-blue?style=for-the-badge" alt="Runs on USB" />
   <img src="https://img.shields.io/badge/cloud-none-critical?style=for-the-badge" alt="No Cloud" />
