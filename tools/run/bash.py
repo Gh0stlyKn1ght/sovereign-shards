@@ -63,7 +63,7 @@ def main() -> None:
     try:
         result = subprocess.run(
             command,
-            shell=True,
+            shell=True,  # nosec B602 — intentional: bash.py is J's shell executor; denylist above gates dangerous commands
             capture_output=True,
             text=True,
             timeout=timeout,
