@@ -93,8 +93,10 @@ class TestResolvePathTraversal(unittest.TestCase):
 
     def test_absolute_path_outside_root_blocked(self):
         from app.file_tools import _resolve
+        # Use a platform-appropriate absolute path that exists outside the project root
+        outside = "C:/Windows/System32/drivers/etc/hosts" if sys.platform == "win32" else "/tmp/outside_project_test.txt"
         with self.assertRaises(ValueError):
-            _resolve("C:/Windows/System32/drivers/etc/hosts")
+            _resolve(outside)
 
 
 # ── CI registry restrictions ─────────────────────────────────────────────────
@@ -148,6 +150,7 @@ class TestPathGuard(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("PATH GUARD ERROR", out)
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows drive-letter paths only meaningful on Windows")
     def test_write_windows_path_blocked(self):
         rc, out = self._run_tool("write.py", "C:\\Windows\\evil.txt", "data")
         self.assertNotEqual(rc, 0)
@@ -511,11 +514,13 @@ class TestPathGuardUNC(unittest.TestCase):
         )
         return result.returncode, (result.stdout + result.stderr).strip()
 
+    @unittest.skipUnless(sys.platform == "win32", "UNC paths only meaningful on Windows")
     def test_write_unc_path_blocked(self):
         rc, out = self._run_tool("write.py", r"\\server\share\evil.txt", "data")
         self.assertNotEqual(rc, 0)
         self.assertIn("PATH GUARD ERROR", out)
 
+    @unittest.skipUnless(sys.platform == "win32", "UNC paths only meaningful on Windows")
     def test_read_unc_path_blocked(self):
         rc, out = self._run_tool("read.py", r"\\server\share\evil.txt")
         self.assertNotEqual(rc, 0)
